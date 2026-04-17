@@ -205,27 +205,74 @@ export const SellerDashboard: React.FC = () => {
       case 'stock':
         return (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <h3>My Store Stock</h3>
-            <p style={{ fontSize: '12px', color: 'var(--hint-color)', marginBottom: '16px' }}>Adjust inventory levels for {currentStore?.name}</p>
-            <div style={{ display: 'grid', gap: '12px', paddingBottom: '80px' }}>
-              {products.map(p => (
-                <div key={p.id} className="card" style={{ padding: '16px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                    <div>
-                      <div style={{ fontWeight: 'bold', fontSize: '16px' }}>{p.name}</div>
-                      <div style={{ fontSize: '11px', color: 'var(--hint-color)' }}>{p.barcode}</div>
-                    </div>
-                    <div style={{ fontWeight: 'bold', color: 'var(--button-color)' }}>€{p.price.toFixed(2)}</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3>Store Stock</h3>
+              <div style={{ fontSize: '12px', color: 'var(--hint-color)' }}>{currentStore?.name}</div>
+            </div>
+            
+            <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
+              {products.map((p, idx) => (
+                <div 
+                  key={p.id} 
+                  style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center', 
+                    padding: '16px',
+                    borderBottom: idx !== products.length - 1 ? '1px solid var(--bg-color)' : 'none'
+                  }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: '600', fontSize: '15px' }}>{p.name}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--hint-color)' }}>€{p.price.toFixed(2)} • {p.barcode}</div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '24px', backgroundColor: 'var(--bg-color)', padding: '12px', borderRadius: '12px' }}>
-                    <button onClick={() => { updateStock(p.id, currentStoreId!, -1); tg?.HapticFeedback?.impactOccurred('medium'); }} style={{ width: '44px', height: '44px', backgroundColor: 'var(--secondary-bg-color)', borderRadius: '12px', fontSize: '24px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>-</button>
-                    <div style={{ textAlign: 'center' }}><div style={{ fontSize: '24px', fontWeight: '900', minWidth: '50px', color: (p.stock[currentStoreId!] || 0) < 10 ? 'var(--danger-color)' : 'inherit' }}>{p.stock[currentStoreId!] || 0}</div><div style={{ fontSize: '10px', color: 'var(--hint-color)', textTransform: 'uppercase' }}>units</div></div>
-                    <button onClick={() => { updateStock(p.id, currentStoreId!, 1); tg?.HapticFeedback?.impactOccurred('medium'); }} style={{ width: '44px', height: '44px', backgroundColor: 'var(--secondary-bg-color)', borderRadius: '12px', fontSize: '24px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+                  
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <button 
+                      onClick={() => { updateStock(p.id, currentStoreId!, -1); tg?.HapticFeedback?.impactOccurred('light'); }}
+                      style={{ width: '32px', height: '32px', backgroundColor: 'var(--bg-color)', borderRadius: '8px', color: 'var(--button-color)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    >
+                      <Minus size={18} strokeWidth={3} />
+                    </button>
+                    
+                    <span style={{ minWidth: '32px', textAlign: 'center', fontWeight: 'bold', fontSize: '16px', color: (p.stock[currentStoreId!] || 0) < 10 ? 'var(--danger-color)' : 'inherit' }}>
+                      {p.stock[currentStoreId!] || 0}
+                    </span>
+                    
+                    <button 
+                      onClick={() => { updateStock(p.id, currentStoreId!, 1); tg?.HapticFeedback?.impactOccurred('light'); }}
+                      style={{ width: '32px', height: '32px', backgroundColor: 'var(--bg-color)', borderRadius: '8px', color: 'var(--button-color)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    >
+                      <Plus size={18} strokeWidth={3} />
+                    </button>
                   </div>
                 </div>
               ))}
             </div>
-            <div style={{ position: 'fixed', bottom: '90px', left: '16px', right: '16px', zIndex: 100 }}><button onClick={handleSaveInventory} style={{ width: '100%', backgroundColor: isSavingStock ? 'var(--success-color)' : 'var(--button-color)', color: 'white', padding: '16px', borderRadius: '16px', fontWeight: 'bold', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.15)', transition: '0.3s' }}>{isSavingStock ? <><Check size={20}/> Stock Updated</> : <><Save size={20}/> Save Changes</>}</button></div>
+
+            {/* Fixed Save Button - Integrated style */}
+            <div style={{ height: '80px' }} /> {/* Spacer */}
+            <div style={{ position: 'fixed', bottom: '90px', left: '16px', right: '16px', zIndex: 100 }}>
+              <button 
+                onClick={handleSaveInventory}
+                style={{ 
+                  width: '100%', 
+                  backgroundColor: isSavingStock ? 'var(--success-color)' : 'var(--button-color)', 
+                  color: 'white', 
+                  padding: '16px', 
+                  borderRadius: '16px', 
+                  fontWeight: 'bold', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  gap: '8px', 
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                  transition: '0.3s'
+                }}
+              >
+                {isSavingStock ? <><Check size={20}/> Changes Saved</> : <><Save size={20}/> Update Inventory</>}
+              </button>
+            </div>
           </motion.div>
         );
 
@@ -284,7 +331,7 @@ export const SellerDashboard: React.FC = () => {
             </div>
             <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
               <button onClick={() => setPaymentMethod('card')} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: `2px solid ${paymentMethod === 'card' ? 'var(--button-color)' : 'var(--secondary-bg-color)'}`, backgroundColor: paymentMethod === 'card' ? 'rgba(51, 144, 236, 0.1)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}><CreditCard size={18} color={paymentMethod === 'card' ? 'var(--button-color)' : 'var(--hint-color)'} /><span style={{ fontSize: '13px', fontWeight: 'bold' }}>Card</span></button>
-              <button onClick={() => setPaymentMethod('cash')} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: `2px solid ${paymentMethod === 'cash' ? 'var(--button-color)' : 'var(--hint-color)'}`, backgroundColor: paymentMethod === 'cash' ? 'rgba(51, 144, 236, 0.1)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}><Banknote size={18} color={paymentMethod === 'cash' ? 'var(--button-color)' : 'var(--hint-color)'} /><span style={{ fontSize: '13px', fontWeight: 'bold' }}>Cash</span></button>
+              <button onClick={() => setPaymentMethod('cash')} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: `2px solid ${paymentMethod === 'cash' ? 'var(--button-color)' : 'var(--secondary-bg-color)'}`, backgroundColor: paymentMethod === 'cash' ? 'rgba(51, 144, 236, 0.1)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}><Banknote size={18} color={paymentMethod === 'cash' ? 'var(--button-color)' : 'var(--hint-color)'} /><span style={{ fontSize: '13px', fontWeight: 'bold' }}>Cash</span></button>
             </div>
             <button onClick={handleCheckout} style={{ width: '100%', backgroundColor: 'var(--button-color)', color: 'white', padding: '16px', borderRadius: '16px', fontWeight: 'bold', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}><ShoppingCart size={20}/> Pay €{cartTotal.toFixed(2)}</button>
           </motion.div>
