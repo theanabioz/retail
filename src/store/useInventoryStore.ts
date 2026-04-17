@@ -19,6 +19,8 @@ interface InventoryState {
   stores: Store[];
   updateStock: (productId: string, storeId: string, delta: number) => void;
   addProduct: (product: Product) => void;
+  removeProduct: (productId: string) => void;
+  updateProduct: (productId: string, updates: Partial<Product>) => void;
 }
 
 export const useInventoryStore = create<InventoryState>((set) => ({
@@ -36,9 +38,15 @@ export const useInventoryStore = create<InventoryState>((set) => ({
     set((state) => ({
       products: state.products.map((p) =>
         p.id === productId
-          ? { ...p, stock: { ...p.stock, [storeId]: (p.stock[storeId] || 0) + delta } }
+          ? { ...p, stock: { ...p.stock, [storeId]: Math.max(0, (p.stock[storeId] || 0) + delta) } }
           : p
       ),
     })),
-  addProduct: (product) => set((state) => ({ products: [...state.products, product] })),
+  addProduct: (product) => set((state) => ({ products: [product, ...state.products] })),
+  removeProduct: (productId) => set((state) => ({ 
+    products: state.products.filter(p => p.id !== productId) 
+  })),
+  updateProduct: (productId, updates) => set((state) => ({
+    products: state.products.map(p => p.id === productId ? { ...p, ...updates } : p)
+  })),
 }));
