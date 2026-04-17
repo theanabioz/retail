@@ -5,7 +5,7 @@ Telegram Mini App for retail operations with:
 - `React + Vite` frontend
 - `FastAPI` backend
 - `Supabase Postgres`
-- `Docker` runtime for the backend
+- `Docker` runtime for backend and frontend
 
 ## Current Status
 
@@ -71,12 +71,17 @@ Important:
 - for Supabase production connections, prefer the `Session Pooler` host
 - if your DB password contains special characters, URL-encode it in `SUPABASE_DB_URL`
 
-## Run Backend With Docker
+## Run Full Stack With Docker
 
 ```bash
 cp .env.example .env
 docker compose up --build
 ```
+
+The stack will start:
+
+- `api` container
+- `web` container with built frontend static files
 
 The backend container will:
 
@@ -84,21 +89,20 @@ The backend container will:
 - run `alembic upgrade head`
 - start `uvicorn`
 
-The API health endpoint will be available at:
+Local endpoints:
 
-- `http://localhost:8000/api/v1/health`
+- frontend container health: `http://localhost:8080/health`
+- backend health: `http://localhost:8000/api/v1/health`
 
 ## Frontend Production API
 
-The frontend reads the backend base URL from:
+The frontend reads the backend base URL from `VITE_API_BASE_URL`.
 
-- `VITE_API_BASE_URL`
+For single-domain production behind `Nginx`, keep it as:
 
-For production builds, point it to your deployed backend, for example:
+- `/api`
 
-```text
-https://api.your-domain.com/api/v1
-```
+This lets the browser call the same origin for both the UI and API.
 
 ## Realtime Strategy
 
@@ -118,8 +122,12 @@ Before public deployment:
 1. Set `ENVIRONMENT=production`
 2. Use the real `TELEGRAM_BOT_TOKEN`
 3. Use the Supabase `Session Pooler` connection string
-4. Set `VITE_API_BASE_URL` to your deployed backend URL
-5. Launch the frontend only inside Telegram Mini App context
+4. Set `VITE_API_BASE_URL=/api`
+5. Point `nordanalytica.com` to the server
+6. Configure host `Nginx` to proxy:
+   - `/` to `127.0.0.1:8080`
+   - `/api` to `127.0.0.1:8000/api/v1`
+7. Launch the frontend only inside Telegram Mini App context
 
 ## Core Database Entities
 
