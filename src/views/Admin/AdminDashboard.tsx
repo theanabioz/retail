@@ -10,10 +10,13 @@ import {
   Settings, 
   Download, 
   ChevronRight,
-  ArrowLeft
+  ArrowLeft,
+  TrendingUp,
+  Award,
+  AlertCircle
 } from 'lucide-react';
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -27,6 +30,12 @@ const mainSalesData = [
   { name: 'Sun', revenue: 2100 },
 ];
 
+const topProducts = [
+  { name: 'Americano Coffee', sales: 142, revenue: 497 },
+  { name: 'Butter Croissant', sales: 98, revenue: 215 },
+  { name: 'Tuna Sandwich', sales: 45, revenue: 265 },
+];
+
 type AdminTab = 'stats' | 'inventory' | 'stores' | 'users' | 'settings';
 
 export const AdminDashboard: React.FC = () => {
@@ -36,6 +45,11 @@ export const AdminDashboard: React.FC = () => {
   const [detailStore, setDetailStore] = useState<StoreType | null>(null);
 
   const totalRevenue = useMemo(() => mainSalesData.reduce((acc, d) => acc + d.revenue, 0), []);
+  
+  // Calculate inventory health
+  const lowStockCount = useMemo(() => {
+    return products.filter(p => Object.values(p.stock).some(s => s < 10)).length;
+  }, [products]);
 
   const renderContent = () => {
     switch (activeTab) {
@@ -43,36 +57,87 @@ export const AdminDashboard: React.FC = () => {
         return (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} key="stats">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3>Global Performance</h3>
+              <h3 style={{ fontSize: '18px' }}>Global Performance</h3>
               <button style={{ color: 'var(--link-color)', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Download size={16}/> Export
               </button>
             </div>
             
-            <div className="card" style={{ height: '250px', padding: '16px 8px 16px 0' }}>
+            {/* Main Chart */}
+            <div className="card" style={{ height: '220px', padding: '16px 8px 16px 0' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={mainSalesData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--hint-color)" opacity={0.2} />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--hint-color)' }} />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--hint-color)' }} />
                   <YAxis hide />
                   <Tooltip 
                     contentStyle={{ backgroundColor: 'var(--bg-color)', borderRadius: '8px', border: 'none', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}
                     itemStyle={{ fontSize: '12px', color: 'var(--button-color)' }}
                     formatter={(value) => [`€${value}`, 'Revenue']}
                   />
-                  <Bar dataKey="revenue" fill="var(--button-color)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="revenue" fill="var(--button-color)" radius={[4, 4, 0, 0]}>
+                    {mainSalesData.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={index === 5 ? 'var(--button-color)' : 'var(--button-color)'} fillOpacity={index === 5 ? 1 : 0.6} />
+                    ))}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' }}>
-              <div className="card">
-                <div style={{ color: 'var(--hint-color)', fontSize: '12px' }}>Total Revenue</div>
-                <div style={{ fontSize: '20px', fontWeight: 'bold' }}>€{totalRevenue.toLocaleString()}</div>
+            {/* Quick Stats Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '12px' }}>
+              <div className="card" style={{ padding: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--hint-color)', fontSize: '11px', marginBottom: '4px' }}>
+                  <TrendingUp size={14} /> Total Revenue
+                </div>
+                <div style={{ fontSize: '18px', fontWeight: 'bold' }}>€{totalRevenue.toLocaleString()}</div>
               </div>
-              <div className="card">
-                <div style={{ color: 'var(--hint-color)', fontSize: '12px' }}>Average Daily</div>
-                <div style={{ fontSize: '20px', fontWeight: 'bold' }}>€{(totalRevenue / 7).toFixed(2)}</div>
+              <div className="card" style={{ padding: '12px', border: lowStockCount > 0 ? '1px solid #ff4d4f33' : 'none' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: lowStockCount > 0 ? 'var(--danger-color)' : 'var(--hint-color)', fontSize: '11px', marginBottom: '4px' }}>
+                  <AlertCircle size={14} /> Low Stock
+                </div>
+                <div style={{ fontSize: '18px', fontWeight: 'bold', color: lowStockCount > 0 ? 'var(--danger-color)' : 'inherit' }}>{lowStockCount} Items</div>
+              </div>
+            </div>
+
+            {/* Top Products Section */}
+            <div style={{ marginTop: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                <Award size={18} color="var(--button-color)" />
+                <h4 style={{ margin: 0 }}>Top Selling Products</h4>
+              </div>
+              <div className="card" style={{ padding: '0' }}>
+                {topProducts.map((p, idx) => (
+                  <div key={p.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: idx !== topProducts.length - 1 ? '1px solid var(--bg-color)' : 'none' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <span style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--hint-color)', width: '20px' }}>{idx + 1}</span>
+                      <div>
+                        <div style={{ fontSize: '14px', fontWeight: '600' }}>{p.name}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--hint-color)' }}>{p.sales} units sold</div>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: '14px', fontWeight: 'bold' }}>€{p.revenue}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Store Rankings */}
+            <div style={{ marginTop: '20px' }}>
+              <h4 style={{ marginBottom: '12px' }}>Store Performance</h4>
+              <div style={{ display: 'grid', gap: '8px' }}>
+                {stores.map((s, idx) => (
+                  <div key={s.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', marginBottom: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <Store size={16} color="var(--button-color)" />
+                      <span style={{ fontSize: '14px' }}>{s.name}</span>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '14px', fontWeight: 'bold' }}>€{(totalRevenue * (idx === 0 ? 0.6 : 0.4)).toFixed(0)}</div>
+                      <div style={{ fontSize: '10px', color: 'var(--success-color)' }}>+12% vs last week</div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </motion.div>
