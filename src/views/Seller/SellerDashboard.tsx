@@ -114,7 +114,7 @@ const sheetSurfaceStyle = {
 };
 
 export const SellerDashboard: React.FC = () => {
-  const { logout, currentStoreId } = useAuthStore();
+  const { logout, currentStoreId, adminSession, exitStoreView } = useAuthStore();
   const { products, stores, updateStock, loadCatalog } = useInventoryStore();
   const { cart, addToCart, updateQuantity, updateUnitPrice, clearCart } = useSaleStore();
   const { tg } = useTelegram();
@@ -584,6 +584,15 @@ export const SellerDashboard: React.FC = () => {
             <div className="card" style={{ padding: '0', marginTop: '20px' }}>
               <div style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '1px solid var(--secondary-bg-color)' }}><span style={{ flex: 1 }}>Notifications</span><ChevronRight size={18} color="var(--hint-color)" /></div>
             </div>
+            {adminSession ? (
+              <button onClick={exitStoreView} className="card" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginTop: '20px', color: 'var(--button-color)' }}>
+                <div>
+                  <div style={{ fontWeight: '700' }}>Return to Admin</div>
+                  <div style={{ fontSize: '12px', color: 'var(--hint-color)', marginTop: '2px' }}>Exit store view and go back to the admin panel</div>
+                </div>
+                <ArrowLeft size={18} />
+              </button>
+            ) : null}
             <button onClick={logout} className="card" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--danger-color)', marginTop: '20px' }}><LogOut size={20} /><span style={{ fontWeight: 'bold' }}>Switch Account / Role</span></button>
           </motion.div>
         );

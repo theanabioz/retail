@@ -112,7 +112,7 @@ type AdminTab = 'stats' | 'inventory' | 'stores' | 'users' | 'settings';
 type SalesFeedFilter = 'today' | 'yesterday' | 'date';
 
 export const AdminDashboard: React.FC = () => {
-  const { logout } = useAuthStore();
+  const { logout, enterStoreView } = useAuthStore();
   const { stores, products, updateStock, updateProduct, loadCatalog } = useInventoryStore();
   const { staff, shifts, activity, loadStaff, loadStaffShifts, loadStaffActivity, addStaff, updateStaff } = useStaffStore();
   const { theme, setTheme } = useSettingsStore();
@@ -880,6 +880,33 @@ export const AdminDashboard: React.FC = () => {
             <div className="card" style={{ padding: '0', marginTop: '20px' }}>
               <div style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '1px solid var(--bg-color)' }}><span style={{ flex: 1 }}>Notifications</span><ChevronRight size={18} color="var(--hint-color)" /></div>
               <div style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '16px' }}><span style={{ flex: 1 }}>Security</span><ChevronRight size={18} color="var(--hint-color)" /></div>
+            </div>
+
+            <h4 style={{ color: 'var(--hint-color)', fontSize: '12px', textTransform: 'uppercase', marginBottom: '12px', marginTop: '20px', marginLeft: '4px' }}>Store Access</h4>
+            <div className="card" style={{ padding: '0' }}>
+              {stores.map((store, index) => (
+                <button
+                  key={store.id}
+                  onClick={() => enterStoreView({ storeId: store.id, storeName: store.name })}
+                  style={{
+                    width: '100%',
+                    padding: '16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '12px',
+                    borderBottom: index !== stores.length - 1 ? '1px solid var(--bg-color)' : 'none',
+                    background: 'transparent',
+                    textAlign: 'left',
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: '600', fontSize: '14px' }}>{store.name}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--hint-color)', marginTop: '2px' }}>Open seller interface for this store</div>
+                  </div>
+                  <ChevronRight size={18} color="var(--hint-color)" />
+                </button>
+              ))}
             </div>
             
             <button onClick={logout} className="card" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--danger-color)', marginTop: '20px' }}><LogOut size={20} /><span style={{ fontWeight: '600' }}>Log Out</span></button>
