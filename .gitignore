@@ -26,3 +26,5 @@ backend/.venv/
 *.sw?
 .env
 backend/.env
+.vercel
+.env*.local
