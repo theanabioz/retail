@@ -20,21 +20,48 @@ import {
 } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const mainSalesData = [
-  { name: 'Mon', revenue: 1400 },
-  { name: 'Tue', revenue: 1300 },
-  { name: 'Wed', revenue: 980 },
-  { name: 'Thu', revenue: 1200 },
-  { name: 'Fri', revenue: 1800 },
-  { name: 'Sat', revenue: 2390 },
-  { name: 'Sun', revenue: 2100 },
-];
+type TimeRange = 'day' | 'week' | 'month' | 'all';
 
-const topProducts = [
-  { name: 'Americano Coffee', sales: 142, revenue: 497 },
-  { name: 'Butter Croissant', sales: 98, revenue: 215 },
-  { name: 'Tuna Sandwich', sales: 45, revenue: 265 },
-];
+// Mock data factory based on time range
+const getSalesData = (range: TimeRange) => {
+  switch (range) {
+    case 'day':
+      return Array.from({ length: 24 }, (_, i) => ({
+        name: `${i.toString().padStart(2, '0')}:00`,
+        revenue: i >= 8 && i <= 22 
+          ? Math.round(100 + Math.random() * 500) // Business hours
+          : Math.round(Math.random() * 50)        // Night hours
+      }));
+    case 'month':
+
+      return [
+        { name: 'Week 1', revenue: 8400 }, { name: 'Week 2', revenue: 9200 },
+        { name: 'Week 3', revenue: 7800 }, { name: 'Week 4', revenue: 10500 },
+      ];
+    case 'all':
+      return [
+        { name: '2023', revenue: 85000 }, { name: '2024', revenue: 124000 },
+        { name: '2025', revenue: 45000 },
+      ];
+    default:
+      return [
+        { name: 'Mon', revenue: 1400 }, { name: 'Tue', revenue: 1300 },
+        { name: 'Wed', revenue: 980 }, { name: 'Thu', revenue: 1200 },
+        { name: 'Fri', revenue: 1800 }, { name: 'Sat', revenue: 2390 },
+        { name: 'Sun', revenue: 2100 },
+      ];
+  }
+};
+
+const getTopProducts = (range: TimeRange) => {
+  const multipliers: Record<TimeRange, number> = { day: 0.15, week: 1, month: 4.2, all: 52 };
+  const m = multipliers[range];
+  return [
+    { name: 'Americano Coffee', sales: Math.round(142 * m), revenue: Math.round(497 * m) },
+    { name: 'Butter Croissant', sales: Math.round(98 * m), revenue: Math.round(215 * m) },
+    { name: 'Tuna Sandwich', sales: Math.round(45 * m), revenue: Math.round(265 * m) },
+  ];
+};
 
 type AdminTab = 'stats' | 'inventory' | 'stores' | 'users' | 'settings';
 
@@ -43,13 +70,22 @@ export const AdminDashboard: React.FC = () => {
   const { stores, products, updateStock } = useInventoryStore();
   const [activeTab, setActiveTab] = useState<AdminTab>('stats');
   const [detailStore, setDetailStore] = useState<StoreType | null>(null);
+  const [timeRange, setTimeRange] = useState<TimeRange>('week');
 
-  const totalRevenue = useMemo(() => mainSalesData.reduce((acc, d) => acc + d.revenue, 0), []);
+  const salesData = useMemo(() => getSalesData(timeRange), [timeRange]);
+  const topProductsData = useMemo(() => getTopProducts(timeRange), [timeRange]);
+  const totalRevenue = useMemo(() => salesData.reduce((acc, d) => acc + d.revenue, 0), [salesData]);
   
-  // Calculate inventory health
   const lowStockCount = useMemo(() => {
     return products.filter(p => Object.values(p.stock).some(s => s < 10)).length;
   }, [products]);
+
+  const timeLabels: Record<TimeRange, string> = {
+    day: 'vs yesterday',
+    week: 'vs last week',
+    month: 'vs last month',
+    all: 'vs last year'
+  };
 
   const renderContent = () => {
     switch (activeTab) {
@@ -62,24 +98,55 @@ export const AdminDashboard: React.FC = () => {
                 <Download size={16}/> Export
               </button>
             </div>
+
+            {/* Time Range Selector */}
+            <div style={{ 
+              display: 'flex', 
+              backgroundColor: 'var(--secondary-bg-color)', 
+              padding: '4px', 
+              borderRadius: '12px', 
+              marginBottom: '20px' 
+            }}>
+              {(['day', 'week', 'month', 'all'] as TimeRange[]).map((range) => (
+                <button
+                  key={range}
+                  onClick={() => setTimeRange(range)}
+                  style={{
+                    flex: 1,
+                    padding: '8px 4px',
+                    borderRadius: '8px',
+                    fontSize: '13px',
+                    fontWeight: timeRange === range ? 'bold' : 'normal',
+                    backgroundColor: timeRange === range ? 'var(--bg-color)' : 'transparent',
+                    color: timeRange === range ? 'var(--button-color)' : 'var(--hint-color)',
+                    boxShadow: timeRange === range ? '0 2px 8px rgba(0,0,0,0.05)' : 'none',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  {range.charAt(0).toUpperCase() + range.slice(1)}
+                </button>
+              ))}
+            </div>
             
             {/* Main Chart */}
             <div className="card" style={{ height: '220px', padding: '16px 8px 16px 0' }}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={mainSalesData}>
+                <BarChart data={salesData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--hint-color)" opacity={0.2} />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--hint-color)' }} />
+                  <XAxis 
+                    dataKey="name" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    interval={timeRange === 'day' ? 3 : 0} 
+                    tick={{ fontSize: 10, fill: 'var(--hint-color)' }} 
+                  />
                   <YAxis hide />
                   <Tooltip 
                     contentStyle={{ backgroundColor: 'var(--bg-color)', borderRadius: '8px', border: 'none', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}
                     itemStyle={{ fontSize: '12px', color: 'var(--button-color)' }}
                     formatter={(value) => [`€${value}`, 'Revenue']}
                   />
-                  <Bar dataKey="revenue" fill="var(--button-color)" radius={[4, 4, 0, 0]}>
-                    {mainSalesData.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={index === 5 ? 'var(--button-color)' : 'var(--button-color)'} fillOpacity={index === 5 ? 1 : 0.6} />
-                    ))}
-                  </Bar>
+                  <Bar dataKey="revenue" fill="var(--button-color)" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -107,16 +174,16 @@ export const AdminDashboard: React.FC = () => {
                 <h4 style={{ margin: 0 }}>Top Selling Products</h4>
               </div>
               <div className="card" style={{ padding: '0' }}>
-                {topProducts.map((p, idx) => (
-                  <div key={p.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: idx !== topProducts.length - 1 ? '1px solid var(--bg-color)' : 'none' }}>
+                {topProductsData.map((p, idx) => (
+                  <div key={p.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: idx !== topProductsData.length - 1 ? '1px solid var(--bg-color)' : 'none' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       <span style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--hint-color)', width: '20px' }}>{idx + 1}</span>
                       <div>
                         <div style={{ fontSize: '14px', fontWeight: '600' }}>{p.name}</div>
-                        <div style={{ fontSize: '11px', color: 'var(--hint-color)' }}>{p.sales} units sold</div>
+                        <div style={{ fontSize: '11px', color: 'var(--hint-color)' }}>{p.sales.toLocaleString()} sold</div>
                       </div>
                     </div>
-                    <div style={{ fontSize: '14px', fontWeight: 'bold' }}>€{p.revenue}</div>
+                    <div style={{ fontSize: '14px', fontWeight: 'bold' }}>€{p.revenue.toLocaleString()}</div>
                   </div>
                 ))}
               </div>
@@ -134,7 +201,7 @@ export const AdminDashboard: React.FC = () => {
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ fontSize: '14px', fontWeight: 'bold' }}>€{(totalRevenue * (idx === 0 ? 0.6 : 0.4)).toFixed(0)}</div>
-                      <div style={{ fontSize: '10px', color: 'var(--success-color)' }}>+12% vs last week</div>
+                      <div style={{ fontSize: '10px', color: 'var(--success-color)' }}>+12% {timeLabels[timeRange]}</div>
                     </div>
                   </div>
                 ))}
