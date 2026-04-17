@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "retail-backend"
+version = "0.1.0"
+description = "Backend API for the retail Telegram Mini App"
+requires-python = ">=3.9"
+dependencies = [
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.30.0",
+  "sqlalchemy>=2.0.36",
+  "psycopg[binary]>=3.2.3",
+  "alembic>=1.14.0",
+  "pydantic-settings>=2.6.0",
+  "python-dotenv>=1.0.1",
+]
+
+[tool.uv]
+dev-dependencies = [
+  "pytest>=8.3.0",
+  "httpx>=0.28.0",
+  "ruff>=0.8.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

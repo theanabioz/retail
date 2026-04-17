@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useInventoryStore, type Store as StoreType, type Product } from '../../store/useInventoryStore';
 import { useStaffStore, type StaffMember } from '../../store/useStaffStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
+import { createProduct, createStore, disableProduct, disableStaffMember, disableStore, fetchDashboardSummary, fetchSales, updateInventoryQuantity, updateProductByApiId, type ApiDashboardSummary, type ApiSale } from '../../lib/api';
 import { 
   LogOut, 
   BarChart3, 
@@ -46,31 +47,24 @@ interface SaleRecord {
   items: string;
 }
 
-interface StaffActivityRecord {
-  id: string;
-  sellerId: string;
-  type: 'shift_start' | 'sale' | 'break_start' | 'break_end' | 'shift_end';
-  title: string;
-  time: string;
-  date: string;
-  meta: string;
-}
+const mapApiSaleToRecord = (sale: ApiSale, stores: StoreType[]): SaleRecord => {
+  const createdAt = new Date(sale.created_at);
+  const legacyStore = stores.find((store) => store.apiId === sale.store_id);
 
-// Global Mock Sales Feed
-const mockSalesFeed: SaleRecord[] = [
-  { id: '101', storeId: '1', storeName: 'Old Town Cannabis Shop', date: '2026-04-17', time: '14:25', total: 24.50, items: '1x Herbal Oil 10ml' },
-  { id: '102', storeId: '2', storeName: 'Beach Cannabis Shop', date: '2026-04-17', time: '14:10', total: 29.90, items: '1x Aroma Cartridge' },
-  { id: '103', storeId: '1', storeName: 'Old Town Cannabis Shop', date: '2026-04-17', time: '13:45', total: 27.00, items: '2x Pre-Rolled Herbal Stick, 1x Herbal Blend 1g' },
-  { id: '104', storeId: '2', storeName: 'Beach Cannabis Shop', date: '2026-04-17', time: '13:15', total: 39.00, items: '1x Starter Kit' },
-  { id: '105', storeId: '1', storeName: 'Old Town Cannabis Shop', date: '2026-04-17', time: '12:50', total: 17.90, items: '1x Terpene Drops' },
-  { id: '106', storeId: '2', storeName: 'Beach Cannabis Shop', date: '2026-04-16', time: '18:35', total: 21.00, items: '1x Relax Gummies 20pcs' },
-  { id: '107', storeId: '1', storeName: 'Old Town Cannabis Shop', date: '2026-04-16', time: '17:05', total: 45.80, items: '2x Herbal Blend 3g' },
-  { id: '108', storeId: '2', storeName: 'Beach Cannabis Shop', date: '2026-04-16', time: '16:40', total: 55.00, items: '2x Premium Flower Pack' },
-  { id: '109', storeId: '1', storeName: 'Old Town Cannabis Shop', date: '2026-04-15', time: '15:15', total: 19.50, items: '1x Botanical Balm 30g' },
-  { id: '110', storeId: '2', storeName: 'Beach Cannabis Shop', date: '2026-04-15', time: '13:55', total: 26.70, items: '3x Herbal Blend 1g' },
-  { id: '111', storeId: '1', storeName: 'Old Town Cannabis Shop', date: '2026-04-14', time: '11:20', total: 33.00, items: '1x Relax Gummies 20pcs, 2x Pre-Rolled Herbal Stick' },
-  { id: '112', storeId: '2', storeName: 'Beach Cannabis Shop', date: '2026-04-14', time: '09:50', total: 24.90, items: '1x Herbal Oil 10ml' },
-];
+  return {
+    id: sale.id.slice(0, 8).toUpperCase(),
+    storeId: legacyStore?.id ?? sale.store_id,
+    storeName: sale.store_name,
+    date: createdAt.toISOString().slice(0, 10),
+    time: createdAt.toLocaleTimeString('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }),
+    total: Number(sale.total_amount),
+    items: sale.items.map((item) => `${item.quantity}x ${item.product_name}`).join(', '),
+  };
+};
 
 const formatDisplayDate = (date: string) =>
   new Date(`${date}T00:00:00`).toLocaleDateString('en-GB');
@@ -84,59 +78,34 @@ const sheetSurfaceStyle = {
   boxShadow: '0 -6px 24px rgba(0,0,0,0.14)',
 };
 
-const mockStaffActivityFeed: StaffActivityRecord[] = [
-  { id: 'a1', sellerId: 's1', type: 'shift_start', title: 'Shift started', date: '2026-04-17', time: '08:58', meta: 'Old Town Cannabis Shop' },
-  { id: 'a2', sellerId: 's1', type: 'sale', title: 'Sale completed', date: '2026-04-17', time: '09:14', meta: '€24.50 • 1x Herbal Oil 10ml' },
-  { id: 'a3', sellerId: 's1', type: 'break_start', title: 'Break started', date: '2026-04-17', time: '10:30', meta: 'Lunch break' },
-  { id: 'a4', sellerId: 's1', type: 'break_end', title: 'Break ended', date: '2026-04-17', time: '10:52', meta: 'Back on shift' },
-  { id: 'a5', sellerId: 's1', type: 'sale', title: 'Sale completed', date: '2026-04-17', time: '11:25', meta: '€17.90 • 1x Terpene Drops' },
-  { id: 'a6', sellerId: 's1', type: 'sale', title: 'Sale completed', date: '2026-04-17', time: '12:45', meta: '€54.80 • 4 positions' },
-  { id: 'a7', sellerId: 's2', type: 'shift_start', title: 'Shift started', date: '2026-04-17', time: '09:40', meta: 'Beach Cannabis Shop' },
-  { id: 'a8', sellerId: 's2', type: 'sale', title: 'Sale completed', date: '2026-04-17', time: '10:05', meta: '€29.90 • 1x Aroma Cartridge' },
-  { id: 'a9', sellerId: 's2', type: 'break_start', title: 'Break started', date: '2026-04-17', time: '11:15', meta: 'Short break' },
-  { id: 'a10', sellerId: 's2', type: 'break_end', title: 'Break ended', date: '2026-04-17', time: '11:28', meta: 'Back on shift' },
-  { id: 'a11', sellerId: 's2', type: 'sale', title: 'Sale completed', date: '2026-04-17', time: '13:20', meta: '€56.70 • 4 positions' },
-  { id: 'a12', sellerId: 's3', type: 'shift_end', title: 'Shift ended', date: '2026-04-16', time: '18:02', meta: 'Old Town Cannabis Shop' },
-];
-
-// Mock data factories
-const getSalesData = (range: TimeRange, storeId: string = 'all') => {
-  const seed = storeId === 'all' ? 1 : (parseInt(storeId) % 2 === 0 ? 0.6 : 0.4);
-  switch (range) {
-    case 'day':
-      return Array.from({ length: 24 }, (_, i) => ({
-        name: `${i.toString().padStart(2, '0')}:00`,
-        revenue: i >= 8 && i <= 22 ? Math.round((100 + Math.random() * 500) * seed) : Math.round(Math.random() * 50)
-      }));
-    case 'month':
-      return [
-        { name: 'Week 1', revenue: Math.round(8400 * seed) }, { name: 'Week 2', revenue: Math.round(9200 * seed) },
-        { name: 'Week 3', revenue: Math.round(7800 * seed) }, { name: 'Week 4', revenue: Math.round(10500 * seed) },
-      ];
-    case 'all':
-      return [
-        { name: '2023', revenue: Math.round(85000 * seed) }, { name: '2024', revenue: Math.round(124000 * seed) },
-        { name: '2025', revenue: Math.round(45000 * seed) },
-      ];
-    default:
-      return [
-        { name: 'Mon', revenue: Math.round(1400 * seed) }, { name: 'Tue', revenue: Math.round(1300 * seed) },
-        { name: 'Wed', revenue: Math.round(980 * seed) }, { name: 'Thu', revenue: Math.round(1200 * seed) },
-        { name: 'Fri', revenue: Math.round(1800 * seed) }, { name: 'Sat', revenue: Math.round(2390 * seed) },
-        { name: 'Sun', revenue: Math.round(2100 * seed) },
-      ];
+const buildSalesData = (range: TimeRange, sales: SaleRecord[]) => {
+  if (range === 'day') {
+    const buckets = Array.from({ length: 24 }, (_, hour) => ({ name: `${hour.toString().padStart(2, '0')}:00`, revenue: 0 }));
+    sales.forEach((sale) => {
+      const hour = Number.parseInt(sale.time.slice(0, 2), 10);
+      if (!Number.isNaN(hour) && buckets[hour]) buckets[hour].revenue += sale.total;
+    });
+    return buckets;
   }
-};
-
-const getTopProducts = (range: TimeRange, storeId: string = 'all') => {
-  const multipliers: Record<TimeRange, number> = { day: 0.15, week: 1, month: 4.2, all: 52 };
-  const storeSeed = storeId === 'all' ? 1 : 0.6;
-  const m = multipliers[range] * storeSeed;
-  return [
-    { name: 'Herbal Blend 1g', sales: Math.round(142 * m), revenue: Math.round(1264 * m) },
-    { name: 'Pre-Rolled Herbal Stick', sales: Math.round(98 * m), revenue: Math.round(637 * m) },
-    { name: 'Herbal Oil 10ml', sales: Math.round(45 * m), revenue: Math.round(1121 * m) },
-  ];
+  if (range === 'week') {
+    const buckets = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((name) => ({ name, revenue: 0 }));
+    sales.forEach((sale) => {
+      const day = new Date(`${sale.date}T00:00:00`).getDay();
+      buckets[day === 0 ? 6 : day - 1].revenue += sale.total;
+    });
+    return buckets;
+  }
+  if (range === 'month') {
+    const buckets = Array.from({ length: 4 }, (_, index) => ({ name: `Week ${index + 1}`, revenue: 0 }));
+    sales.forEach((sale) => {
+      const weekIndex = Math.min(3, Math.floor((Number.parseInt(sale.date.slice(8, 10), 10) - 1) / 7));
+      buckets[weekIndex].revenue += sale.total;
+    });
+    return buckets;
+  }
+  const yearMap = new Map<string, number>();
+  sales.forEach((sale) => yearMap.set(sale.date.slice(0, 4), (yearMap.get(sale.date.slice(0, 4)) || 0) + sale.total));
+  return [...yearMap.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([name, revenue]) => ({ name, revenue }));
 };
 
 type AdminTab = 'stats' | 'inventory' | 'stores' | 'users' | 'settings';
@@ -144,8 +113,8 @@ type SalesFeedFilter = 'today' | 'yesterday' | 'date';
 
 export const AdminDashboard: React.FC = () => {
   const { logout } = useAuthStore();
-  const { stores, products, updateStock, addProduct, addStore, removeProduct, updateProduct } = useInventoryStore();
-  const { staff, addStaff, removeStaff, updateStaff, getSellerHours, shifts } = useStaffStore();
+  const { stores, products, updateStock, updateProduct, loadCatalog } = useInventoryStore();
+  const { staff, shifts, activity, loadStaff, loadStaffShifts, loadStaffActivity, addStaff, updateStaff } = useStaffStore();
   const { theme, setTheme } = useSettingsStore();
   
   const [activeTab, setActiveTab] = useState<AdminTab>('stats');
@@ -169,18 +138,48 @@ export const AdminDashboard: React.FC = () => {
 
   const [isStoreEditorOpen, setIsStoreEditorOpen] = useState(false);
   const [storeFormData, setStoreFormData] = useState({ name: '', address: '' });
+  const [salesFeed, setSalesFeed] = useState<SaleRecord[]>([]);
+  const [dashboardSummary, setDashboardSummary] = useState<ApiDashboardSummary | null>(null);
   
   const [isStaffEditorOpen, setIsStaffEditorOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
-  const [staffFormData, setStaffFormData] = useState({ name: '', storeId: '' });
+  const [staffFormData, setStaffFormData] = useState({ name: '', storeId: '', telegramId: '' });
+
+  useEffect(() => {
+    const loadAdminSales = async () => {
+      try {
+        const sales = await fetchSales();
+        setSalesFeed(sales.map((sale) => mapApiSaleToRecord(sale, stores)));
+      } catch (error) {
+        console.error('Failed to load admin sales feed', error);
+      }
+    };
+
+    if (stores.length > 0) {
+      void loadAdminSales();
+      void loadStaff();
+    }
+  }, [loadStaff, stores]);
+
+  useEffect(() => {
+    if (stores.length === 0) return;
+    const timer = window.setInterval(() => {
+      void fetchSales().then((sales) => setSalesFeed(sales.map((sale) => mapApiSaleToRecord(sale, stores)))).catch(() => {});
+      void loadStaff().catch(() => {});
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, [loadStaff, stores]);
 
   // Global calculations
-  const salesData = useMemo(() => getSalesData(timeRange), [timeRange]);
-  const topProductsData = useMemo(() => getTopProducts(timeRange), [timeRange]);
-  const totalRevenue = useMemo(() => salesData.reduce((acc, d) => acc + d.revenue, 0), [salesData]);
+  const salesData = useMemo(() => dashboardSummary?.sales_data.map((item) => ({ name: item.name, revenue: Number(item.revenue) })) ?? [], [dashboardSummary]);
+  const topProductsData = useMemo(() => dashboardSummary?.top_products.map((item) => ({ name: item.name, sales: item.sales, revenue: Number(item.revenue) })) ?? [], [dashboardSummary]);
+  const totalRevenue = useMemo(() => Number(dashboardSummary?.total_revenue ?? 0), [dashboardSummary]);
 
   // Per-store calculations
-  const storeSalesData = useMemo(() => detailStore ? getSalesData(storeTimeRange, detailStore.id) : [], [detailStore, storeTimeRange]);
+  const storeSalesData = useMemo(
+    () => detailStore ? buildSalesData(storeTimeRange, salesFeed.filter((sale) => sale.storeId === detailStore.id)) : [],
+    [detailStore, salesFeed, storeTimeRange]
+  );
   
   const lowStockCount = useMemo(() => {
     return products.filter(p => Object.values(p.stock).some(s => s < 10)).length;
@@ -202,22 +201,22 @@ export const AdminDashboard: React.FC = () => {
 
   const filteredNetworkSales = useMemo(() => {
     if (salesFeedFilter === 'today') {
-      return mockSalesFeed.filter((sale) => sale.date === '2026-04-17');
+      return salesFeed.filter((sale) => sale.date === '2026-04-17');
     }
 
     if (salesFeedFilter === 'yesterday') {
-      return mockSalesFeed.filter((sale) => sale.date === '2026-04-16');
+      return salesFeed.filter((sale) => sale.date === '2026-04-16');
     }
 
-    return mockSalesFeed.filter((sale) => sale.date >= selectedSalesFromDate && sale.date <= selectedSalesToDate);
-  }, [salesFeedFilter, selectedSalesFromDate, selectedSalesToDate]);
+    return salesFeed.filter((sale) => sale.date >= selectedSalesFromDate && sale.date <= selectedSalesToDate);
+  }, [salesFeed, salesFeedFilter, selectedSalesFromDate, selectedSalesToDate]);
 
   const filteredStoreSales = useMemo(() => {
     if (!detailStore) {
       return [];
     }
 
-    const storeSales = mockSalesFeed.filter((sale) => sale.storeId === detailStore.id);
+    const storeSales = salesFeed.filter((sale) => sale.storeId === detailStore.id);
 
     if (salesFeedFilter === 'today') {
       return storeSales.filter((sale) => sale.date === '2026-04-17');
@@ -228,46 +227,74 @@ export const AdminDashboard: React.FC = () => {
     }
 
     return storeSales.filter((sale) => sale.date >= selectedSalesFromDate && sale.date <= selectedSalesToDate);
-  }, [detailStore, salesFeedFilter, selectedSalesFromDate, selectedSalesToDate]);
+  }, [detailStore, salesFeed, salesFeedFilter, selectedSalesFromDate, selectedSalesToDate]);
 
-  const timeLabels: Record<TimeRange, string> = {
-    day: 'vs yesterday',
-    week: 'vs last week',
-    month: 'vs last month',
-    all: 'vs last year'
-  };
+  useEffect(() => {
+    if (!detailStaff) return;
+    void loadStaffShifts(detailStaff.id);
+    void loadStaffActivity(detailStaff.id);
+  }, [detailStaff, loadStaffActivity, loadStaffShifts]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const summary = await fetchDashboardSummary(timeRange);
+        setDashboardSummary(summary);
+      } catch (error) {
+        console.error('Failed to load dashboard summary', error);
+      }
+    })();
+  }, [timeRange]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void fetchDashboardSummary(timeRange).then(setDashboardSummary).catch(() => {});
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, [timeRange]);
 
   const handleSaveProduct = () => {
     if (!formData.name || !formData.price) return;
-    if (editingProduct) {
-      updateProduct(editingProduct.id, { name: formData.name, price: parseFloat(formData.price), barcode: formData.barcode });
-    } else {
-      addProduct({ id: 'p' + Date.now(), name: formData.name, price: parseFloat(formData.price), barcode: formData.barcode || Math.floor(Math.random() * 1000000).toString(), stock: stores.reduce((acc, s) => ({ ...acc, [s.id]: 0 }), {}) });
-    }
-    setIsEditorOpen(false);
+    void (async () => {
+      if (editingProduct?.apiId) {
+        await updateProductByApiId(editingProduct.apiId, {
+          name: formData.name,
+          price: parseFloat(formData.price),
+          barcode: formData.barcode,
+        });
+        updateProduct(editingProduct.id, { name: formData.name, price: parseFloat(formData.price), barcode: formData.barcode });
+      } else {
+        await createProduct({
+          name: formData.name,
+          price: parseFloat(formData.price),
+          barcode: formData.barcode || Math.floor(Math.random() * 1000000).toString(),
+        });
+        await loadCatalog();
+      }
+      setIsEditorOpen(false);
+    })();
   };
 
   const handleSaveStaff = () => {
     if (!staffFormData.name || !staffFormData.storeId) return;
-    if (editingStaff) {
-      updateStaff(editingStaff.id, { name: staffFormData.name, storeId: staffFormData.storeId });
-    } else {
-      addStaff({ id: 's' + Date.now(), name: staffFormData.name, storeId: staffFormData.storeId, status: 'offline', joinedDate: new Date().toISOString().split('T')[0] });
-    }
-    setIsStaffEditorOpen(false);
+    void (async () => {
+      if (editingStaff) {
+        await updateStaff(editingStaff.id, { name: staffFormData.name, storeId: staffFormData.storeId });
+      } else if (staffFormData.telegramId) {
+        await addStaff({ telegramId: staffFormData.telegramId, name: staffFormData.name, storeId: staffFormData.storeId });
+      }
+      setIsStaffEditorOpen(false);
+    })();
   };
 
   const handleSaveStore = () => {
     if (!storeFormData.name || !storeFormData.address) return;
-
-    addStore({
-      id: 'st' + Date.now(),
-      name: storeFormData.name,
-      address: storeFormData.address,
-    });
-
-    setIsStoreEditorOpen(false);
-    setStoreFormData({ name: '', address: '' });
+    void (async () => {
+      await createStore({ name: storeFormData.name, address: storeFormData.address });
+      await loadCatalog();
+      setIsStoreEditorOpen(false);
+      setStoreFormData({ name: '', address: '' });
+    })();
   };
 
   const renderContent = () => {
@@ -448,7 +475,7 @@ export const AdminDashboard: React.FC = () => {
                 onClick={() => setIsNetworkSalesOpen(true)}
                 style={{ padding: '0', cursor: 'pointer' }}
               >
-                {mockSalesFeed.slice(0, 5).map((sale, idx) => (
+                {salesFeed.slice(0, 5).map((sale: SaleRecord, idx: number) => (
                   <div key={sale.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderBottom: idx !== 4 ? '1px solid var(--bg-color)' : 'none' }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -486,10 +513,10 @@ export const AdminDashboard: React.FC = () => {
                 <Store size={18} color="var(--button-color)" />
                 <h4 style={{ margin: 0 }}>Store Performance</h4>
               </div>
-              {stores.map((s, idx) => (
-                <div key={s.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><Store size={16} color="var(--button-color)" /><span style={{ fontSize: '14px' }}>{s.name}</span></div>
-                  <div style={{ textAlign: 'right' }}><div style={{ fontSize: '14px', fontWeight: 'bold' }}>€{(totalRevenue * (idx === 0 ? 0.6 : 0.4)).toFixed(0)}</div><div style={{ fontSize: '10px', color: 'var(--success-color)' }}>+12% {timeLabels[timeRange]}</div></div>
+              {(dashboardSummary?.store_performance ?? []).map((s) => (
+                <div key={s.store_id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><Store size={16} color="var(--button-color)" /><span style={{ fontSize: '14px' }}>{s.store_name}</span></div>
+                  <div style={{ textAlign: 'right' }}><div style={{ fontSize: '14px', fontWeight: 'bold' }}>€{Number(s.revenue).toFixed(0)}</div><div style={{ fontSize: '10px', color: 'var(--success-color)' }}>{s.sales_count} sales</div></div>
                 </div>
               ))}
             </div>
@@ -500,7 +527,7 @@ export const AdminDashboard: React.FC = () => {
         return (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} key="inventory">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}><h3 style={{ fontSize: '24px' }}>Inventory</h3><button onClick={() => { setEditingProduct(null); setFormData({ name: '', price: '', barcode: '' }); setIsEditorOpen(true); }} style={{ backgroundColor: 'var(--button-color)', color: 'white', padding: '8px 16px', borderRadius: '12px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}><Plus size={18} /> Add Product</button></div>
-            <div style={{ display: 'grid', gap: '12px' }}>{products.map(product => (<div key={product.id} className="card" style={{ padding: '16px' }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}><div><div style={{ fontWeight: 'bold', fontSize: '17px' }}>{product.name}</div><div style={{ color: 'var(--button-color)', fontWeight: 'bold', fontSize: '15px' }}>€{product.price.toFixed(2)}</div><div style={{ fontSize: '11px', color: 'var(--hint-color)', marginTop: '2px' }}>Barcode: {product.barcode}</div></div><div style={{ display: 'flex', gap: '8px' }}><button onClick={() => { setEditingProduct(product); setFormData({ name: product.name, price: product.price.toString(), barcode: product.barcode }); setIsEditorOpen(true); }} style={{ padding: '8px', backgroundColor: 'var(--bg-color)', borderRadius: '10px', color: 'var(--button-color)' }}><Pencil size={18}/></button><button onClick={() => { if(confirm('Delete this product?')) removeProduct(product.id) }} style={{ padding: '8px', backgroundColor: 'var(--bg-color)', borderRadius: '10px', color: 'var(--danger-color)' }}><Trash2 size={18}/></button></div></div><div style={{ backgroundColor: 'var(--bg-color)', borderRadius: '12px', padding: '12px', display: 'grid', gap: '10px' }}>{stores.map(store => (<div key={store.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: '13px', fontWeight: '500' }}>{store.name}</span><div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><button onClick={() => updateStock(product.id, store.id, -1)} style={{ width: '28px', height: '28px', backgroundColor: 'var(--secondary-bg-color)', borderRadius: '6px', fontWeight: 'bold' }}>-</button><span style={{ minWidth: '30px', textAlign: 'center' , fontWeight: 'bold', fontSize: '14px' }}>{product.stock[store.id] || 0}</span><button onClick={() => updateStock(product.id, store.id, 1)} style={{ width: '28px', height: '28px', backgroundColor: 'var(--secondary-bg-color)', borderRadius: '6px', fontWeight: 'bold' }}>+</button></div></div>))}</div></div>))}</div>
+            <div style={{ display: 'grid', gap: '12px' }}>{products.map(product => (<div key={product.id} className="card" style={{ padding: '16px' }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}><div><div style={{ fontWeight: 'bold', fontSize: '17px' }}>{product.name}</div><div style={{ color: 'var(--button-color)', fontWeight: 'bold', fontSize: '15px' }}>€{product.price.toFixed(2)}</div><div style={{ fontSize: '11px', color: 'var(--hint-color)', marginTop: '2px' }}>Barcode: {product.barcode}</div></div><div style={{ display: 'flex', gap: '8px' }}><button onClick={() => { setEditingProduct(product); setFormData({ name: product.name, price: product.price.toString(), barcode: product.barcode }); setIsEditorOpen(true); }} style={{ padding: '8px', backgroundColor: 'var(--bg-color)', borderRadius: '10px', color: 'var(--button-color)' }}><Pencil size={18}/></button><button onClick={() => { void (async () => { if (!product.apiId) return; await disableProduct(product.apiId); await loadCatalog(); })(); }} style={{ padding: '8px', backgroundColor: 'var(--bg-color)', borderRadius: '10px', color: 'var(--danger-color)' }}><Trash2 size={18}/></button></div></div><div style={{ backgroundColor: 'var(--bg-color)', borderRadius: '12px', padding: '12px', display: 'grid', gap: '10px' }}>{stores.map(store => (<div key={store.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: '13px', fontWeight: '500' }}>{store.name}</span><div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><button onClick={() => updateStock(product.id, store.id, -1)} style={{ width: '28px', height: '28px', backgroundColor: 'var(--secondary-bg-color)', borderRadius: '6px', fontWeight: 'bold' }}>-</button><span style={{ minWidth: '30px', textAlign: 'center' , fontWeight: 'bold', fontSize: '14px' }}>{product.stock[store.id] || 0}</span><button onClick={() => updateStock(product.id, store.id, 1)} style={{ width: '28px', height: '28px', backgroundColor: 'var(--secondary-bg-color)', borderRadius: '6px', fontWeight: 'bold' }}>+</button></div></div>))}</div></div>))}</div>
             <ProductEditor isOpen={isEditorOpen} onClose={() => setIsEditorOpen(false)} onSave={handleSaveProduct} formData={formData} setFormData={setFormData} isEdit={!!editingProduct} />
           </motion.div>
         );
@@ -524,7 +551,7 @@ export const AdminDashboard: React.FC = () => {
                 </div>
                 <div style={{ display: 'grid', gap: '12px' }}>
                   {stores.map(store => (
-                    <div key={store.id} className="card" onClick={() => { setDetailStore(store); setStoreDetailTab('performance'); }} style={{ display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer' }}><div style={{ backgroundColor: 'var(--bg-color)', padding: '10px', borderRadius: '12px' }}><Store size={24} color="var(--button-color)" /></div><div style={{ flex: 1 }}><div style={{ fontWeight: 'bold' }}>{store.name}</div><div style={{ fontSize: '12px', color: 'var(--hint-color)' }}>{store.address}</div></div><ChevronRight size={20} color="var(--hint-color)" /></div>
+                    <div key={store.id} className="card" onClick={() => { setDetailStore(store); setStoreDetailTab('performance'); }} style={{ display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer' }}><div style={{ backgroundColor: 'var(--bg-color)', padding: '10px', borderRadius: '12px' }}><Store size={24} color="var(--button-color)" /></div><div style={{ flex: 1 }}><div style={{ fontWeight: 'bold' }}>{store.name}</div><div style={{ fontSize: '12px', color: 'var(--hint-color)' }}>{store.address}</div></div><button onClick={(e) => { e.stopPropagation(); void (async () => { if (!store.apiId) return; await disableStore(store.apiId); await loadCatalog(); })(); }} style={{ padding: '8px', backgroundColor: 'var(--bg-color)', borderRadius: '10px', color: 'var(--danger-color)' }}><Trash2 size={18} /></button><ChevronRight size={20} color="var(--hint-color)" /></div>
                   ))}
                 </div>
                 <StoreEditor isOpen={isStoreEditorOpen} onClose={() => setIsStoreEditorOpen(false)} onSave={handleSaveStore} formData={storeFormData} setFormData={setStoreFormData} />
@@ -644,11 +671,11 @@ export const AdminDashboard: React.FC = () => {
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' }}>
                         <div className="card" style={{ padding: '12px' }}>
                           <div style={{ color: 'var(--hint-color)', fontSize: '11px' }}>Total Revenue</div>
-                          <div style={{ fontSize: '18px', fontWeight: 'bold' }}>€{storeSalesData.reduce((acc, d) => acc + d.revenue, 0).toLocaleString()}</div>
+                          <div style={{ fontSize: '18px', fontWeight: 'bold' }}>€{storeSalesData.reduce((acc: number, d: { revenue: number }) => acc + d.revenue, 0).toLocaleString()}</div>
                         </div>
                         <div className="card" style={{ padding: '12px' }}>
                           <div style={{ color: 'var(--hint-color)', fontSize: '11px' }}>Today's Sales</div>
-                          <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{Math.round(Math.random() * 20 + 10)}</div>
+                          <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{salesFeed.filter((sale) => sale.storeId === detailStore.id && sale.date === '2026-04-17').length}</div>
                         </div>
                       </div>
 
@@ -664,7 +691,7 @@ export const AdminDashboard: React.FC = () => {
                           <ChevronRight size={18} color="var(--hint-color)" />
                         </button>
                         <div className="card" onClick={() => setIsStoreSalesOpen(true)} style={{ padding: '0', cursor: 'pointer' }}>
-                          {mockSalesFeed.filter(s => s.storeId === detailStore.id).slice(0, 5).map((sale, idx) => (
+                          {salesFeed.filter((sale: SaleRecord) => sale.storeId === detailStore.id).slice(0, 5).map((sale: SaleRecord, idx: number) => (
                             <div key={sale.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderBottom: idx !== 4 ? '1px solid var(--bg-color)' : 'none' }}>
                               <div style={{ flex: 1 }}>
                                 <div style={{ fontWeight: 'bold', fontSize: '14px' }}>€{sale.total.toFixed(2)}</div>
@@ -753,7 +780,30 @@ export const AdminDashboard: React.FC = () => {
                             );
                           })}
                         </div>
-                        <div style={{ position: 'fixed', bottom: '90px', left: '16px', right: '16px', zIndex: 100 }}><button onClick={() => alert('Saved!')} style={{ width: '100%', backgroundColor: 'var(--button-color)', color: 'white', padding: '16px', borderRadius: '16px', fontWeight: 'bold', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}><Save size={20}/> Save Inventory</button></div>
+                        <div style={{ position: 'fixed', bottom: '90px', left: '16px', right: '16px', zIndex: 100 }}>
+                          <button
+                            onClick={() => {
+                              void (async () => {
+                                if (!detailStore?.apiId) return;
+                                await Promise.all(
+                                  products
+                                    .filter((product) => product.apiId)
+                                    .map((product) =>
+                                      updateInventoryQuantity(
+                                        detailStore.apiId!,
+                                        product.apiId!,
+                                        product.stock[detailStore.id] || 0
+                                      )
+                                    )
+                                );
+                                alert('Inventory saved');
+                              })();
+                            }}
+                            style={{ width: '100%', backgroundColor: 'var(--button-color)', color: 'white', padding: '16px', borderRadius: '16px', fontWeight: 'bold', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}
+                          >
+                            <Save size={20}/> Save Inventory
+                          </button>
+                        </div>
                       </motion.div>
                     )}
                   </>
@@ -768,14 +818,14 @@ export const AdminDashboard: React.FC = () => {
           <AnimatePresence mode="wait">
             {!detailStaff ? (
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} key="staff-list">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}><h3 style={{ fontSize: '24px' }}>Staff</h3><button onClick={() => { setEditingStaff(null); setStaffFormData({ name: '', storeId: stores[0]?.id || '' }); setIsStaffEditorOpen(true); }} style={{ backgroundColor: 'var(--button-color)', color: 'white', padding: '8px 16px', borderRadius: '12px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}><UserPlus size={18} /> Add Staff</button></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}><h3 style={{ fontSize: '24px' }}>Staff</h3><button onClick={() => { setEditingStaff(null); setStaffFormData({ name: '', storeId: stores[0]?.id || '', telegramId: '' }); setIsStaffEditorOpen(true); }} style={{ backgroundColor: 'var(--button-color)', color: 'white', padding: '8px 16px', borderRadius: '12px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}><UserPlus size={18} /> Add Staff</button></div>
                 <div style={{ display: 'grid', gap: '12px' }}>{staff.map(member => (<div key={member.id} className="card" onClick={() => { setDetailStaff(member); setDetailStaffTab('history'); }} style={{ display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer' }}><div style={{ position: 'relative' }}><div style={{ backgroundColor: 'var(--secondary-bg-color)', padding: '12px', borderRadius: '50%' }}><Users size={24} color="var(--button-color)" /></div><div style={{ position: 'absolute', bottom: 0, right: 0, width: '12px', height: '12px', borderRadius: '50%', backgroundColor: member.status === 'online' ? 'var(--success-color)' : 'var(--hint-color)', border: '2px solid var(--bg-color)' }} /></div><div style={{ flex: 1 }}><div style={{ fontWeight: 'bold' }}>{member.name}</div><div style={{ fontSize: '12px', color: 'var(--hint-color)' }}>{stores.find(s => s.id === member.storeId)?.name}</div></div><ChevronRight size={20} color="var(--hint-color)" /></div>))}</div>
                 <StaffEditor isOpen={isStaffEditorOpen} onClose={() => setIsStaffEditorOpen(false)} onSave={handleSaveStaff} formData={staffFormData} setFormData={setStaffFormData} stores={stores} isEdit={!!editingStaff} />
               </motion.div>
             ) : (
               <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} key="staff-detail">
                 <button onClick={() => setDetailStaff(null)} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--button-color)', background: 'none', marginBottom: '20px', padding: 0 }}><ArrowLeft size={18} /> Back</button>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}><div style={{ backgroundColor: 'var(--secondary-bg-color)', padding: '20px', borderRadius: '50%' }}><Users size={32} color="var(--button-color)" /></div><div><h2 style={{ marginBottom: '4px' }}>{detailStaff.name}</h2><span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '10px', backgroundColor: detailStaff.status === 'online' ? '#e6f7ed' : '#f0f0f0', color: detailStaff.status === 'online' ? 'var(--success-color)' : 'var(--hint-color)', fontWeight: 'bold' }}>{detailStaff.status.toUpperCase()}</span></div></div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}><div style={{ backgroundColor: 'var(--secondary-bg-color)', padding: '20px', borderRadius: '50%' }}><Users size={32} color="var(--button-color)" /></div><div style={{ flex: 1 }}><h2 style={{ marginBottom: '4px' }}>{detailStaff.name}</h2><span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '10px', backgroundColor: detailStaff.status === 'online' ? '#e6f7ed' : '#f0f0f0', color: detailStaff.status === 'online' ? 'var(--success-color)' : 'var(--hint-color)', fontWeight: 'bold' }}>{detailStaff.status.toUpperCase()}</span></div><button onClick={() => { void (async () => { await disableStaffMember(detailStaff.id); await loadStaff(); setDetailStaff(null); })(); }} style={{ padding: '8px', backgroundColor: 'var(--bg-color)', borderRadius: '10px', color: 'var(--danger-color)' }}><Trash2 size={18} /></button></div>
                 <div style={{ display: 'flex', backgroundColor: 'var(--secondary-bg-color)', padding: '4px', borderRadius: '14px', marginBottom: '20px' }}>
                   <button onClick={() => setDetailStaffTab('history')} style={{ flex: 1, padding: '10px', borderRadius: '10px', fontSize: '14px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: detailStaffTab === 'history' ? 'var(--bg-color)' : 'transparent', color: detailStaffTab === 'history' ? 'var(--button-color)' : 'var(--hint-color)', transition: '0.2s' }}><Clock size={18}/> Shift History</button>
                   <button onClick={() => setDetailStaffTab('activity')} style={{ flex: 1, padding: '10px', borderRadius: '10px', fontSize: '14px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: detailStaffTab === 'activity' ? 'var(--bg-color)' : 'transparent', color: detailStaffTab === 'activity' ? 'var(--button-color)' : 'var(--hint-color)', transition: '0.2s' }}><Receipt size={18}/> Activity Feed</button>
@@ -789,8 +839,8 @@ export const AdminDashboard: React.FC = () => {
                   <>
                     <h3>Activity Feed</h3>
                     <div className="card" style={{ padding: '0' }}>
-                      {mockStaffActivityFeed.filter((entry) => entry.sellerId === detailStaff.id).length > 0 ? (
-                        [...mockStaffActivityFeed.filter((entry) => entry.sellerId === detailStaff.id)].reverse().map((entry, idx, arr) => (
+                      {activity.filter((entry) => entry.sellerId === detailStaff.id).length > 0 ? (
+                        activity.filter((entry) => entry.sellerId === detailStaff.id).map((entry, idx, arr) => (
                           <div key={entry.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderBottom: idx !== arr.length - 1 ? '1px solid var(--bg-color)' : 'none' }}>
                             <div style={{ flex: 1 }}>
                               <div style={{ fontWeight: '600', fontSize: '14px' }}>{entry.title}</div>
@@ -899,6 +949,9 @@ const StaffEditor: React.FC<{ isOpen: boolean; onClose: () => void; onSave: () =
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}><h3>{isEdit ? 'Edit Staff' : 'Add New Staff'}</h3><button onClick={onClose} style={{ background: 'var(--secondary-bg-color)', borderRadius: '50%', padding: '4px' }}><X size={20}/></button></div>
           <div style={{ display: 'grid', gap: '16px' }}>
             <div><label style={{ fontSize: '12px', color: 'var(--hint-color)', marginLeft: '4px' }}>Full Name</label><input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="e.g. John Doe" /></div>
+            {!isEdit && (
+              <div><label style={{ fontSize: '12px', color: 'var(--hint-color)', marginLeft: '4px' }}>Telegram ID</label><input value={formData.telegramId} onChange={e => setFormData({...formData, telegramId: e.target.value})} placeholder="e.g. 123456789" /></div>
+            )}
             <div>
               <label style={{ fontSize: '12px', color: 'var(--hint-color)', marginLeft: '4px' }}>Assign Store</label>
               <select value={formData.storeId} onChange={e => setFormData({...formData, storeId: e.target.value})}>

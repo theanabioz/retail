@@ -1,73 +1,151 @@
-# React + TypeScript + Vite
+# Retail Mini App
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Telegram Mini App for retail operations with:
 
-Currently, two official plugins are available:
+- `React + Vite` frontend
+- `FastAPI` backend
+- `Supabase Postgres`
+- `Docker` runtime for the backend
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Current Status
 
-## React Compiler
+The app is now functionally connected end-to-end:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- Telegram authentication is validated on the backend
+- sellers can start/end shifts, pause/resume, create sales, and save stock changes
+- admins can view dashboard stats, network sales, staff activity, low stock, and manage stores/products/staff
+- Supabase is the source of truth for stores, products, inventory, sales, shifts, and staff activity
 
-## Expanding the ESLint configuration
+## Auth Model
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+Authentication is designed to be reliable and server-validated:
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+1. Telegram opens the Mini App.
+2. The frontend sends `initData` to the backend.
+3. The backend validates the Telegram signature using `TELEGRAM_BOT_TOKEN`.
+4. The backend extracts the real `telegram_id`.
+5. The backend loads the local user from the database by `telegram_id`.
+6. The backend applies the role from the database, never from the client.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+This means:
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- `telegram_id` is the external identity
+- roles live only in our database
+- the client never decides whether it is `admin` or `seller`
+- the production frontend no longer exposes a local role picker fallback
+
+## Backend Structure
+
+```text
+backend/
+  app/
+    api/
+    config.py
+    db/
+    models/
+    schemas/
+    services/
+    main.py
+  alembic/
+  alembic.ini
+  Dockerfile
+  pyproject.toml
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Environment
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Copy `.env.example` to `.env` and fill in:
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- `ENVIRONMENT`
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `SUPABASE_DB_URL`
+- `TELEGRAM_BOT_TOKEN`
+- `VITE_API_BASE_URL`
+
+Important:
+
+- the anon key is fine for the frontend
+- the backend should use `SUPABASE_DB_URL`
+- the backend Telegram auth requires the bot token
+- for Supabase production connections, prefer the `Session Pooler` host
+- if your DB password contains special characters, URL-encode it in `SUPABASE_DB_URL`
+
+## Run Backend With Docker
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+The backend container will:
+
+- install dependencies
+- run `alembic upgrade head`
+- start `uvicorn`
+
+The API health endpoint will be available at:
+
+- `http://localhost:8000/api/v1/health`
+
+## Frontend Production API
+
+The frontend reads the backend base URL from:
+
+- `VITE_API_BASE_URL`
+
+For production builds, point it to your deployed backend, for example:
+
+```text
+https://api.your-domain.com/api/v1
+```
+
+## Realtime Strategy
+
+The app currently uses lightweight near-realtime polling for the most important screens:
+
+- seller sales + current shift
+- admin sales feed
+- admin staff list
+- admin dashboard summary
+
+This keeps the interface fresh without requiring a dedicated websocket layer yet.
+
+## Production Notes
+
+Before public deployment:
+
+1. Set `ENVIRONMENT=production`
+2. Use the real `TELEGRAM_BOT_TOKEN`
+3. Use the Supabase `Session Pooler` connection string
+4. Set `VITE_API_BASE_URL` to your deployed backend URL
+5. Launch the frontend only inside Telegram Mini App context
+
+## Core Database Entities
+
+Planned tables:
+
+- `users`
+- `user_store_assignments`
+- `stores`
+- `products`
+- `inventory_balances`
+- `sales`
+- `sale_items`
+- `shifts`
+- `shift_breaks`
+- `activity_events`
+
+## Seed Data
+
+Seed logic lives in:
+
+- [backend/app/db/seed.py](./backend/app/db/seed.py)
+- [backend/scripts/seed_db.py](./backend/scripts/seed_db.py)
+
+To seed manually:
+
+```bash
+cd backend
+python scripts/seed_db.py
 ```

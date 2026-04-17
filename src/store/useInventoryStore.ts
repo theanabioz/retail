@@ -1,7 +1,9 @@
 import { create } from 'zustand';
+import { fetchCatalog } from '../lib/api';
 
 export interface Product {
   id: string;
+  apiId?: string;
   name: string;
   price: number;
   barcode: string;
@@ -10,6 +12,7 @@ export interface Product {
 
 export interface Store {
   id: string;
+  apiId?: string;
   name: string;
   address: string;
 }
@@ -17,6 +20,9 @@ export interface Store {
 interface InventoryState {
   products: Product[];
   stores: Store[];
+  isCatalogLoading: boolean;
+  hasLoadedCatalog: boolean;
+  loadCatalog: () => Promise<void>;
   updateStock: (productId: string, storeId: string, delta: number) => void;
   addProduct: (product: Product) => void;
   addStore: (store: Store) => void;
@@ -41,6 +47,66 @@ export const useInventoryStore = create<InventoryState>((set) => ({
     { id: 'p9', name: 'Premium Flower Pack', price: 27.50, barcode: '810109', stock: { '1': 13, '2': 10 } },
     { id: 'p10', name: 'Terpene Drops', price: 17.90, barcode: '810110', stock: { '1': 19, '2': 14 } },
   ],
+  isCatalogLoading: false,
+  hasLoadedCatalog: false,
+  loadCatalog: async () => {
+    set({ isCatalogLoading: true });
+
+    try {
+      const { stores, products, inventory } = await fetchCatalog();
+
+      const legacyStoreIdByName: Record<string, string> = {
+        'Old Town Cannabis Shop': '1',
+        'Beach Cannabis Shop': '2',
+      };
+
+      const mappedStores = stores.map((store, index) => ({
+        id: legacyStoreIdByName[store.name] || String(index + 1),
+        apiId: store.id,
+        name: store.name,
+        address: store.address,
+      }));
+
+      const storeIdByApiId = new Map(
+        stores.map((store, index) => [
+          store.id,
+          legacyStoreIdByName[store.name] || String(index + 1),
+        ])
+      );
+
+      const mappedProducts = products.map((product, index) => {
+        const legacyProductId = `p${index + 1}`;
+        const stock = inventory
+          .filter((balance) => balance.product_id === product.id)
+          .reduce<Record<string, number>>((acc, balance) => {
+            const mappedStoreId = storeIdByApiId.get(balance.store_id);
+            if (mappedStoreId) {
+              acc[mappedStoreId] = balance.quantity;
+            }
+            return acc;
+          }, {});
+
+        return {
+          id: legacyProductId,
+          apiId: product.id,
+          name: product.name,
+          price: Number(product.default_price),
+          barcode: product.barcode,
+          stock,
+        };
+      });
+
+      set({
+        stores: mappedStores,
+        products: mappedProducts,
+        hasLoadedCatalog: true,
+        isCatalogLoading: false,
+      });
+    } catch (error) {
+      console.error('Failed to load catalog from API', error);
+      set({ isCatalogLoading: false });
+    }
+  },
   updateStock: (productId, storeId, delta) =>
     set((state) => ({
       products: state.products.map((p) =>

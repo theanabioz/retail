@@ -4,6 +4,7 @@ import { useInventoryStore } from '../../store/useInventoryStore';
 import { useSaleStore } from '../../store/useSaleStore';
 import { useTelegram } from '../../hooks/useTelegram';
 import { useSettingsStore } from '../../store/useSettingsStore';
+import { createSale, endBreak, endShift, fetchCurrentShift, fetchSales, startBreak, startShift, updateInventoryQuantity, type ApiSale, type ApiShift } from '../../lib/api';
 import { 
   LogOut, 
   ScanBarcode, 
@@ -54,42 +55,25 @@ interface Order {
   items: OrderItem[];
 }
 
-const mockOrders: Order[] = [
-  { 
-    id: '1201', date: '2026-04-17', time: '12:45', total: 54.80, paymentMethod: 'card', 
-    items: [
-      { name: 'Herbal Oil 10ml', quantity: 1, price: 24.90 },
-      { name: 'Pre-Rolled Herbal Stick', quantity: 2, price: 6.50 },
-      { name: 'Botanical Balm 30g', quantity: 1, price: 16.90 }
-    ]
-  },
-  { 
-    id: '1202', date: '2026-04-17', time: '13:20', total: 56.70, paymentMethod: 'cash', 
-    items: [
-      { name: 'Herbal Blend 1g', quantity: 2, price: 8.90 },
-      { name: 'Relax Gummies 20pcs', quantity: 1, price: 21.00 },
-      { name: 'Terpene Drops', quantity: 1, price: 17.90 }
-    ]
-  },
-  {
-    id: '1203', date: '2026-04-16', time: '17:40', total: 39.00, paymentMethod: 'card',
-    items: [
-      { name: 'Starter Kit', quantity: 1, price: 39.00 }
-    ]
-  },
-  {
-    id: '1204', date: '2026-04-16', time: '15:10', total: 27.50, paymentMethod: 'cash',
-    items: [
-      { name: 'Premium Flower Pack', quantity: 1, price: 27.50 }
-    ]
-  },
-  {
-    id: '1205', date: '2026-04-15', time: '11:25', total: 49.80, paymentMethod: 'card',
-    items: [
-      { name: 'Herbal Oil 10ml', quantity: 2, price: 24.90 }
-    ]
-  }
-];
+const mapApiSaleToOrder = (sale: ApiSale): Order => {
+  const createdAt = new Date(sale.created_at);
+  return {
+    id: sale.id.slice(0, 8).toUpperCase(),
+    date: createdAt.toISOString().slice(0, 10),
+    time: createdAt.toLocaleTimeString('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }),
+    total: Number(sale.total_amount),
+    paymentMethod: sale.payment_method,
+    items: sale.items.map((item) => ({
+      name: item.product_name,
+      quantity: item.quantity,
+      price: Number(item.sold_price),
+    })),
+  };
+};
 
 const formatDisplayDate = (date: string) =>
   new Date(`${date}T00:00:00`).toLocaleDateString('en-GB');
@@ -131,8 +115,8 @@ const sheetSurfaceStyle = {
 
 export const SellerDashboard: React.FC = () => {
   const { logout, currentStoreId } = useAuthStore();
-  const { products, updateStock } = useInventoryStore();
-  const { cart, addToCart, updateQuantity, updateUnitPrice, clearCart, isShiftActive, shiftStartedAt, isOnBreak, breakEntries, toggleShift, toggleBreak } = useSaleStore();
+  const { products, stores, updateStock, loadCatalog } = useInventoryStore();
+  const { cart, addToCart, updateQuantity, updateUnitPrice, clearCart } = useSaleStore();
   const { tg } = useTelegram();
   const { theme, setTheme } = useSettingsStore();
   
@@ -140,6 +124,9 @@ export const SellerDashboard: React.FC = () => {
   const [search, setSearch] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'cash' | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [currentShift, setCurrentShift] = useState<ApiShift | null>(null);
+  const [isSubmittingSale, setIsSubmittingSale] = useState(false);
   const [isSavingStock, setIsSavingStock] = useState(false);
   const [isCartExpanded, setIsCartExpanded] = useState(false);
   const [priceEditorItemId, setPriceEditorItemId] = useState<string | null>(null);
@@ -148,6 +135,17 @@ export const SellerDashboard: React.FC = () => {
   const [selectedOrdersFromDate, setSelectedOrdersFromDate] = useState('2026-04-15');
   const [selectedOrdersToDate, setSelectedOrdersToDate] = useState('2026-04-17');
 
+  const currentStore = stores.find((store) => store.id === currentStoreId) ?? null;
+  const currentStoreApiId = currentStore?.apiId ?? currentStoreId ?? null;
+  const isShiftActive = Boolean(currentShift && !currentShift.ended_at);
+  const shiftStartedAt = currentShift?.started_at ?? null;
+  const isOnBreak = currentShift?.status === 'on_break';
+  const breakEntries = (currentShift?.breaks ?? []).map((entry) => ({
+    id: entry.id,
+    start: entry.started_at,
+    end: entry.ended_at ?? null,
+  }));
+
   const filteredProducts = products.filter(p => 
     p.name.toLowerCase().includes(search.toLowerCase()) || p.barcode.includes(search)
   );
@@ -155,7 +153,7 @@ export const SellerDashboard: React.FC = () => {
   const cartTotal = cart.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
   const cartItemsCount = cart.reduce((acc, item) => acc + item.quantity, 0);
 
-  const filteredOrders = mockOrders.filter((order) => {
+  const filteredOrders = orders.filter((order) => {
     if (orderFilter === 'today') {
       return order.date === '2026-04-17';
     }
@@ -174,7 +172,7 @@ export const SellerDashboard: React.FC = () => {
         ? 'Yesterday Sales'
         : 'Custom Range Sales';
 
-  const todayOrders = mockOrders.filter((order) => order.date === '2026-04-17');
+  const todayOrders = orders.filter((order) => order.date === '2026-04-17');
   const todaySalesTotal = todayOrders.reduce((sum, order) => sum + order.total, 0);
   const todayItemsCount = todayOrders.reduce((sum, order) => sum + order.items.reduce((itemSum, item) => itemSum + item.quantity, 0), 0);
   const averageTicket = todayOrders.length > 0 ? todaySalesTotal / todayOrders.length : 0;
@@ -187,6 +185,48 @@ export const SellerDashboard: React.FC = () => {
     }
   }, [cartItemsCount]);
 
+  useEffect(() => {
+    if (!currentStoreApiId) {
+      return;
+    }
+
+    const loadSellerData = async () => {
+      try {
+        const [salesData, shiftData] = await Promise.all([
+          fetchSales({ storeId: currentStoreApiId }),
+          fetchCurrentShift(),
+        ]);
+
+        setOrders(salesData.map(mapApiSaleToOrder));
+        setCurrentShift(shiftData);
+      } catch (error) {
+        console.error('Failed to load seller dashboard data', error);
+      }
+    };
+
+    void loadSellerData();
+  }, [currentStoreApiId]);
+
+  useEffect(() => {
+    if (!currentStoreApiId) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      void Promise.all([
+        fetchSales({ storeId: currentStoreApiId }),
+        fetchCurrentShift(),
+      ])
+        .then(([salesData, shiftData]) => {
+          setOrders(salesData.map(mapApiSaleToOrder));
+          setCurrentShift(shiftData);
+        })
+        .catch(() => {});
+    }, 12000);
+
+    return () => window.clearInterval(timer);
+  }, [currentStoreApiId]);
+
   const handleAddToCart = (product: any) => {
     addToCart(product);
     if (tg?.HapticFeedback) {
@@ -194,26 +234,72 @@ export const SellerDashboard: React.FC = () => {
     }
   };
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     if (!paymentMethod) {
       alert('Please select payment method');
       return;
     }
-    if (tg?.HapticFeedback) {
-      tg.HapticFeedback.notificationOccurred('success');
+
+    if (!currentStoreApiId) {
+      alert('Current store is not available');
+      return;
     }
-    alert(`Success! Sale of €${cartTotal.toFixed(2)} recorded via ${paymentMethod.toUpperCase()}`);
-    clearCart();
-    setPaymentMethod(null);
-    setIsCartExpanded(false);
+
+    try {
+      setIsSubmittingSale(true);
+      await createSale({
+        storeId: currentStoreApiId,
+        paymentMethod,
+        items: cart.map((item) => ({
+          productId: item.apiId ?? item.id,
+          quantity: item.quantity,
+          soldPrice: item.unitPrice,
+        })),
+      });
+      const refreshedSales = await fetchSales({ storeId: currentStoreApiId });
+      setOrders(refreshedSales.map(mapApiSaleToOrder));
+      await loadCatalog();
+
+      if (tg?.HapticFeedback) {
+        tg.HapticFeedback.notificationOccurred('success');
+      }
+
+      alert(`Success! Sale of €${cartTotal.toFixed(2)} recorded via ${paymentMethod.toUpperCase()}`);
+      clearCart();
+      setPaymentMethod(null);
+      setIsCartExpanded(false);
+    } catch (error) {
+      console.error('Failed to create sale', error);
+      alert('Could not complete the sale. Please check shift status and try again.');
+    } finally {
+      setIsSubmittingSale(false);
+    }
   };
 
   const handleSaveInventory = () => {
-    setIsSavingStock(true);
-    if (tg?.HapticFeedback) {
-      tg.HapticFeedback.notificationOccurred('success');
-    }
-    setTimeout(() => setIsSavingStock(false), 2000);
+    void (async () => {
+      if (!currentStoreApiId) {
+        return;
+      }
+      setIsSavingStock(true);
+      try {
+        await Promise.all(
+          products
+            .filter((product) => product.apiId)
+            .map((product) =>
+              updateInventoryQuantity(currentStoreApiId, product.apiId!, product.stock[currentStoreId!] || 0)
+            )
+        );
+        if (tg?.HapticFeedback) {
+          tg.HapticFeedback.notificationOccurred('success');
+        }
+      } catch (error) {
+        console.error('Failed to save inventory', error);
+        alert('Could not save stock changes.');
+      } finally {
+        setTimeout(() => setIsSavingStock(false), 800);
+      }
+    })();
   };
 
   const openPriceEditor = (itemId: string, unitPrice: number) => {
@@ -456,8 +542,30 @@ export const SellerDashboard: React.FC = () => {
             todaySalesTotal={todaySalesTotal}
             todayItemsCount={todayItemsCount}
             averageTicket={averageTicket}
-            onToggleShift={toggleShift}
-            onToggleBreak={toggleBreak}
+            onToggleShift={() => {
+              void (async () => {
+                try {
+                  const nextShift = isShiftActive
+                    ? await endShift()
+                    : await startShift(currentStoreApiId ?? currentStoreId ?? '');
+                  setCurrentShift(nextShift.ended_at ? null : nextShift);
+                } catch (error) {
+                  console.error('Failed to toggle shift', error);
+                  alert('Could not update shift status.');
+                }
+              })();
+            }}
+            onToggleBreak={() => {
+              void (async () => {
+                try {
+                  const response = isOnBreak ? await endBreak() : await startBreak();
+                  setCurrentShift(response.shift);
+                } catch (error) {
+                  console.error('Failed to toggle break', error);
+                  alert('Could not update break status.');
+                }
+              })();
+            }}
             onGoToCheckout={() => setActiveTab('checkout')}
             onGoToHistory={() => setActiveTab('history')}
           />
@@ -568,9 +676,10 @@ export const SellerDashboard: React.FC = () => {
 
                     <button 
                       onClick={handleCheckout}
+                      disabled={isSubmittingSale}
                       style={{ width: '100%', backgroundColor: 'var(--button-color)', color: 'white', padding: '18px', borderRadius: '18px', fontWeight: '900', fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', boxShadow: '0 6px 18px rgba(51, 144, 236, 0.2)' }}
                     >
-                      <Check size={24} /> Confirm Sale • €{cartTotal.toFixed(2)}
+                      <Check size={24} /> {isSubmittingSale ? 'Processing...' : `Confirm Sale • €${cartTotal.toFixed(2)}`}
                     </button>
                   </div>
                 </motion.div>
