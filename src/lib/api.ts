@@ -1,8 +1,18 @@
 import WebApp from '@twa-dev/sdk';
 import type { UserRole } from '../store/useAuthStore';
 
+type TelegramWindow = Window & {
+  Telegram?: {
+    WebApp?: typeof WebApp;
+  };
+};
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? 'http://localhost:8000/api/v1' : '/api');
+
+function getTelegramWebApp() {
+  return (window as TelegramWindow).Telegram?.WebApp ?? WebApp;
+}
 
 export interface ApiStore {
   id: string;
@@ -126,7 +136,7 @@ export interface ApiDashboardSummary {
 
 function getAuthHeaders(): HeadersInit {
   const headers: Record<string, string> = {};
-  const initData = WebApp?.initData;
+  const initData = getTelegramWebApp()?.initData;
 
   if (initData) {
     headers['X-Telegram-Init-Data'] = initData;
@@ -159,6 +169,8 @@ export async function authenticateTelegram(): Promise<{
   fullName: string;
   assignedStoreIds: string[];
 }> {
+  const initData = getTelegramWebApp()?.initData ?? '';
+
   const response = await fetchJson<{
     telegram_id: string;
     role: 'admin' | 'seller';
@@ -166,7 +178,7 @@ export async function authenticateTelegram(): Promise<{
     assigned_store_ids: string[];
   }>('/auth/telegram', {
     method: 'POST',
-    body: JSON.stringify({ init_data: WebApp.initData }),
+    body: JSON.stringify({ init_data: initData }),
   });
 
   return {
