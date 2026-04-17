@@ -26,8 +26,8 @@ interface InventoryState {
 
 export const useInventoryStore = create<InventoryState>((set) => ({
   stores: [
-    { id: '1', name: 'Central Mall Store', address: 'Alexanderplatz 1, Berlin' },
-    { id: '2', name: 'City Station Outlet', address: 'Gare du Nord, Paris' },
+    { id: '1', name: 'Old Town Cannabis Shop', address: 'Rua 5 de Outubro 42, Albufeira' },
+    { id: '2', name: 'Beach Cannabis Shop', address: 'Avenida da Liberdade 18, Albufeira' },
   ],
   products: [
     { id: 'p1', name: 'Herbal Oil 10ml', price: 24.90, barcode: '810101', stock: { '1': 18, '2': 12 } },

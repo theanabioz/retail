@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useInventoryStore } from '../../store/useInventoryStore';
 import { useSaleStore } from '../../store/useSaleStore';
@@ -10,12 +10,10 @@ import {
   ShoppingCart, 
   Plus, 
   Minus, 
-  Trash2, 
   Play, 
   Square,
   History,
   Package,
-  User,
   CreditCard,
   Banknote,
   Search,
@@ -30,11 +28,16 @@ import {
   Moon,
   Monitor,
   ChevronUp,
-  X
+  X,
+  Pause,
+  PlayCircle,
+  Coffee,
+  Activity
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 type SellerTab = 'checkout' | 'history' | 'stock' | 'shift' | 'settings';
+type OrderFilter = 'today' | 'yesterday' | 'date';
 
 interface OrderItem {
   name: string;
@@ -44,6 +47,7 @@ interface OrderItem {
 
 interface Order {
   id: string;
+  date: string;
   time: string;
   total: number;
   paymentMethod: 'card' | 'cash';
@@ -52,7 +56,7 @@ interface Order {
 
 const mockOrders: Order[] = [
   { 
-    id: '1201', time: '12:45', total: 54.80, paymentMethod: 'card', 
+    id: '1201', date: '2026-04-17', time: '12:45', total: 54.80, paymentMethod: 'card', 
     items: [
       { name: 'Herbal Oil 10ml', quantity: 1, price: 24.90 },
       { name: 'Pre-Rolled Herbal Stick', quantity: 2, price: 6.50 },
@@ -60,19 +64,66 @@ const mockOrders: Order[] = [
     ]
   },
   { 
-    id: '1202', time: '13:20', total: 56.70, paymentMethod: 'cash', 
+    id: '1202', date: '2026-04-17', time: '13:20', total: 56.70, paymentMethod: 'cash', 
     items: [
       { name: 'Herbal Blend 1g', quantity: 2, price: 8.90 },
       { name: 'Relax Gummies 20pcs', quantity: 1, price: 21.00 },
       { name: 'Terpene Drops', quantity: 1, price: 17.90 }
     ]
+  },
+  {
+    id: '1203', date: '2026-04-16', time: '17:40', total: 39.00, paymentMethod: 'card',
+    items: [
+      { name: 'Starter Kit', quantity: 1, price: 39.00 }
+    ]
+  },
+  {
+    id: '1204', date: '2026-04-16', time: '15:10', total: 27.50, paymentMethod: 'cash',
+    items: [
+      { name: 'Premium Flower Pack', quantity: 1, price: 27.50 }
+    ]
+  },
+  {
+    id: '1205', date: '2026-04-15', time: '11:25', total: 49.80, paymentMethod: 'card',
+    items: [
+      { name: 'Herbal Oil 10ml', quantity: 2, price: 24.90 }
+    ]
   }
 ];
 
+const formatDisplayDate = (date: string) =>
+  new Date(`${date}T00:00:00`).toLocaleDateString('en-GB');
+
+const formatDisplayDateTime = (value: string) =>
+  new Date(value).toLocaleString('en-GB', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+
+const formatTimeOnly = (value: string) =>
+  new Date(value).toLocaleTimeString('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+
+const formatDuration = (seconds: number) => {
+  const safeSeconds = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const secs = safeSeconds % 60;
+
+  return [hours, minutes, secs].map((value) => value.toString().padStart(2, '0')).join(':');
+};
+
 export const SellerDashboard: React.FC = () => {
   const { logout, currentStoreId } = useAuthStore();
-  const { products, stores, updateStock } = useInventoryStore();
-  const { cart, addToCart, updateQuantity, clearCart, isShiftActive, toggleShift } = useSaleStore();
+  const { products, updateStock } = useInventoryStore();
+  const { cart, addToCart, updateQuantity, updateUnitPrice, clearCart, isShiftActive, shiftStartedAt, isOnBreak, breakEntries, toggleShift, toggleBreak } = useSaleStore();
   const { tg } = useTelegram();
   const { theme, setTheme } = useSettingsStore();
   
@@ -82,21 +133,85 @@ export const SellerDashboard: React.FC = () => {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isSavingStock, setIsSavingStock] = useState(false);
   const [isCartExpanded, setIsCartExpanded] = useState(false);
+  const [orderFilter, setOrderFilter] = useState<OrderFilter>('today');
+  const [selectedOrdersFromDate, setSelectedOrdersFromDate] = useState('2026-04-15');
+  const [selectedOrdersToDate, setSelectedOrdersToDate] = useState('2026-04-17');
+  const [now, setNow] = useState(() => Date.now());
 
-  const currentStore = stores.find(s => s.id === currentStoreId);
-  
   const filteredProducts = products.filter(p => 
     p.name.toLowerCase().includes(search.toLowerCase()) || p.barcode.includes(search)
   );
 
-  const cartTotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
+  const cartTotal = cart.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
   const cartItemsCount = cart.reduce((acc, item) => acc + item.quantity, 0);
+
+  const filteredOrders = mockOrders.filter((order) => {
+    if (orderFilter === 'today') {
+      return order.date === '2026-04-17';
+    }
+
+    if (orderFilter === 'yesterday') {
+      return order.date === '2026-04-16';
+    }
+
+    return order.date >= selectedOrdersFromDate && order.date <= selectedOrdersToDate;
+  });
+
+  const ordersTitle =
+    orderFilter === 'today'
+      ? 'Today Sales'
+      : orderFilter === 'yesterday'
+        ? 'Yesterday Sales'
+        : 'Custom Range Sales';
+
+  const todayOrders = mockOrders.filter((order) => order.date === '2026-04-17');
+  const todaySalesTotal = todayOrders.reduce((sum, order) => sum + order.total, 0);
+  const todayItemsCount = todayOrders.reduce((sum, order) => sum + order.items.reduce((itemSum, item) => itemSum + item.quantity, 0), 0);
+  const averageTicket = todayOrders.length > 0 ? todaySalesTotal / todayOrders.length : 0;
+  const totalBreakSeconds = breakEntries.reduce((sum, entry) => {
+    const endTime = entry.end ? new Date(entry.end).getTime() : now;
+    return sum + Math.max(0, Math.floor((endTime - new Date(entry.start).getTime()) / 1000));
+  }, 0);
+  const shiftDurationSeconds = shiftStartedAt ? Math.max(0, Math.floor((now - new Date(shiftStartedAt).getTime()) / 1000)) : 0;
+  const activeWorkSeconds = Math.max(0, shiftDurationSeconds - totalBreakSeconds);
+
+  const shiftActivity = [
+    ...(shiftStartedAt
+      ? [{
+          id: 'shift-started',
+          label: 'Shift started',
+          time: formatDisplayDateTime(shiftStartedAt),
+          tone: 'var(--button-color)',
+        }]
+      : []),
+    ...breakEntries.map((entry, index) => ({
+      id: entry.id,
+      label: entry.end ? `Break ${index + 1} completed` : `Break ${index + 1} in progress`,
+      time: entry.end
+        ? `${formatTimeOnly(entry.start)} - ${formatTimeOnly(entry.end)}`
+        : `Started at ${formatTimeOnly(entry.start)}`,
+      tone: entry.end ? 'var(--hint-color)' : 'var(--danger-color)',
+    })),
+    ...(todayOrders[0]
+      ? [{
+          id: 'last-sale',
+          label: 'Latest sale today',
+          time: `${formatDisplayDate(todayOrders[0].date)} • ${todayOrders[0].time}`,
+          tone: 'var(--success-color)',
+        }]
+      : []),
+  ];
 
   useEffect(() => {
     if (cartItemsCount === 0) {
       setIsCartExpanded(false);
     }
   }, [cartItemsCount]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const handleAddToCart = (product: any) => {
     addToCart(product);
@@ -169,13 +284,64 @@ export const SellerDashboard: React.FC = () => {
           <AnimatePresence mode="wait">
             {!selectedOrder ? (
               <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} key="history-list">
-                <h3>Today's Sales</h3>
+                <h3 style={{ fontSize: '24px' }}>{ordersTitle}</h3>
+                <div style={{ marginTop: '16px', marginBottom: '16px' }}>
+                  <div style={{ display: 'flex', backgroundColor: 'var(--secondary-bg-color)', padding: '4px', borderRadius: '12px', marginBottom: orderFilter === 'date' ? '12px' : 0 }}>
+                    <button
+                      onClick={() => setOrderFilter('today')}
+                      style={{ flex: 1, padding: '8px 4px', borderRadius: '8px', fontSize: '13px', fontWeight: orderFilter === 'today' ? 'bold' : 'normal', backgroundColor: orderFilter === 'today' ? 'var(--bg-color)' : 'transparent', color: orderFilter === 'today' ? 'var(--button-color)' : 'var(--hint-color)', boxShadow: orderFilter === 'today' ? '0 2px 8px rgba(0,0,0,0.05)' : 'none', transition: 'all 0.2s' }}
+                    >
+                      Today
+                    </button>
+                    <button
+                      onClick={() => setOrderFilter('yesterday')}
+                      style={{ flex: 1, padding: '8px 4px', borderRadius: '8px', fontSize: '13px', fontWeight: orderFilter === 'yesterday' ? 'bold' : 'normal', backgroundColor: orderFilter === 'yesterday' ? 'var(--bg-color)' : 'transparent', color: orderFilter === 'yesterday' ? 'var(--button-color)' : 'var(--hint-color)', boxShadow: orderFilter === 'yesterday' ? '0 2px 8px rgba(0,0,0,0.05)' : 'none', transition: 'all 0.2s' }}
+                    >
+                      Yesterday
+                    </button>
+                    <button
+                      onClick={() => setOrderFilter('date')}
+                      style={{ flex: 1, padding: '8px 4px', borderRadius: '8px', fontSize: '13px', fontWeight: orderFilter === 'date' ? 'bold' : 'normal', backgroundColor: orderFilter === 'date' ? 'var(--bg-color)' : 'transparent', color: orderFilter === 'date' ? 'var(--button-color)' : 'var(--hint-color)', boxShadow: orderFilter === 'date' ? '0 2px 8px rgba(0,0,0,0.05)' : 'none', transition: 'all 0.2s' }}
+                    >
+                      Any Date
+                    </button>
+                  </div>
+
+                  {orderFilter === 'date' && (
+                    <div className="card" style={{ padding: '8px', marginBottom: 0, display: 'grid', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: 'var(--bg-color)', borderRadius: '10px', padding: '10px 12px' }}>
+                        <label style={{ fontSize: '11px', color: 'var(--hint-color)', minWidth: '32px', margin: 0 }}>
+                          From
+                        </label>
+                        <input
+                          type="date"
+                          value={selectedOrdersFromDate}
+                          max={selectedOrdersToDate}
+                          onChange={(e) => setSelectedOrdersFromDate(e.target.value)}
+                          style={{ marginBottom: 0, minWidth: 0, flex: 1, padding: 0, border: 'none', background: 'transparent', fontSize: '13px', fontWeight: 600, WebkitAppearance: 'none' }}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: 'var(--bg-color)', borderRadius: '10px', padding: '10px 12px' }}>
+                        <label style={{ fontSize: '11px', color: 'var(--hint-color)', minWidth: '32px', margin: 0 }}>
+                          To
+                        </label>
+                        <input
+                          type="date"
+                          value={selectedOrdersToDate}
+                          min={selectedOrdersFromDate}
+                          onChange={(e) => setSelectedOrdersToDate(e.target.value)}
+                          style={{ marginBottom: 0, minWidth: 0, flex: 1, padding: 0, border: 'none', background: 'transparent', fontSize: '13px', fontWeight: 600, WebkitAppearance: 'none' }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <div style={{ display: 'grid', gap: '10px', marginTop: '16px' }}>
-                  {mockOrders.map(order => (
+                  {filteredOrders.map(order => (
                     <div key={order.id} className="card" onClick={() => setSelectedOrder(order)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
                       <div>
                         <div style={{ fontWeight: 'bold' }}>Sale #{order.id}</div>
-                        <div style={{ fontSize: '12px', color: 'var(--hint-color)' }}>{order.time} • {order.items.length} items • {order.paymentMethod === 'card' ? 'Card' : 'Cash'}</div>
+                        <div style={{ fontSize: '12px', color: 'var(--hint-color)' }}>{formatDisplayDate(order.date)} • {order.time} • {order.items.length} items • {order.paymentMethod === 'card' ? 'Card' : 'Cash'}</div>
                       </div>
                       <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <div style={{ fontWeight: 'bold' }}>€{order.total.toFixed(2)}</div>
@@ -183,6 +349,11 @@ export const SellerDashboard: React.FC = () => {
                       </div>
                     </div>
                   ))}
+                  {filteredOrders.length === 0 && (
+                    <div className="card" style={{ color: 'var(--hint-color)', fontSize: '13px' }}>
+                      No sales found for the selected date.
+                    </div>
+                  )}
                 </div>
               </motion.div>
             ) : (
@@ -192,7 +363,7 @@ export const SellerDashboard: React.FC = () => {
                   <div style={{ textAlign: 'center', marginBottom: '20px' }}>
                     <Receipt size={40} color="var(--button-color)" style={{ marginBottom: '12px' }} />
                     <h2 style={{ marginBottom: '4px' }}>Sale #{selectedOrder.id}</h2>
-                    <p style={{ fontSize: '13px', color: 'var(--hint-color)' }}>{selectedOrder.time} • {selectedOrder.paymentMethod.toUpperCase()}</p>
+                    <p style={{ fontSize: '13px', color: 'var(--hint-color)' }}>{formatDisplayDate(selectedOrder.date)} • {selectedOrder.time} • {selectedOrder.paymentMethod.toUpperCase()}</p>
                   </div>
                   <div style={{ borderTop: '1px solid var(--secondary-bg-color)', borderBottom: '1px solid var(--secondary-bg-color)', padding: '16px 0', marginBottom: '16px' }}>
                     {selectedOrder.items.map((item, idx) => (
@@ -207,7 +378,6 @@ export const SellerDashboard: React.FC = () => {
                     <span style={{ fontWeight: '900', fontSize: '22px', color: 'var(--button-color)' }}>€{selectedOrder.total.toFixed(2)}</span>
                   </div>
                 </div>
-                <button style={{ width: '100%', padding: '16px', borderRadius: '12px', border: '1px solid var(--danger-color)', color: 'var(--danger-color)', backgroundColor: 'transparent', fontWeight: 'bold', marginTop: '20px' }}>Refund Transaction</button>
               </motion.div>
             )}
           </AnimatePresence>
@@ -217,8 +387,7 @@ export const SellerDashboard: React.FC = () => {
         return (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3>Store Stock</h3>
-              <div style={{ fontSize: '12px', color: 'var(--hint-color)' }}>{currentStore?.name}</div>
+              <h3 style={{ fontSize: '24px' }}>Store Stock</h3>
             </div>
             <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
               {products.map((p, idx) => (
@@ -243,15 +412,101 @@ export const SellerDashboard: React.FC = () => {
       case 'shift':
         return (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <h3>Shift Management</h3>
-            <div className="card" style={{ padding: '24px', textAlign: 'center', marginTop: '16px' }}>
-              <div style={{ fontSize: '12px', color: 'var(--hint-color)', textTransform: 'uppercase', marginBottom: '8px' }}>Work Time Today</div>
-              <div style={{ fontSize: '42px', fontWeight: '900', color: isShiftActive ? 'var(--success-color)' : 'inherit' }}>08:42:15</div>
-              <button onClick={toggleShift} style={{ width: '100%', padding: '16px', borderRadius: '16px', backgroundColor: isShiftActive ? 'var(--danger-color)' : 'var(--success-color)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', fontWeight: 'bold', fontSize: '18px', marginTop: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }}>{isShiftActive ? <><Square size={24} fill="white"/> End My Shift</> : <><Play size={24} fill="white"/> Start My Shift</>}</button>
+            <h3 style={{ fontSize: '24px' }}>Shift Management</h3>
+
+            <div className="card" style={{ padding: '20px', marginTop: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '18px' }}>
+                <div>
+                  <div style={{ fontSize: '12px', color: 'var(--hint-color)', textTransform: 'uppercase', marginBottom: '6px' }}>Current Shift</div>
+                  <div style={{ fontSize: '28px', fontWeight: '900', lineHeight: 1.1, color: 'var(--text-color)' }}>
+                    {formatDuration(activeWorkSeconds)}
+                  </div>
+                </div>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '7px 10px', borderRadius: '999px', backgroundColor: 'var(--bg-color)' }}>
+                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: isShiftActive ? (isOnBreak ? 'var(--danger-color)' : 'var(--success-color)') : 'var(--hint-color)' }} />
+                  <span style={{ fontSize: '12px', fontWeight: '700', color: isShiftActive ? (isOnBreak ? 'var(--danger-color)' : 'var(--success-color)') : 'var(--hint-color)' }}>
+                    {isShiftActive ? (isOnBreak ? 'On Break' : 'Shift Active') : 'Shift Closed'}
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '18px' }}>
+                <div style={{ backgroundColor: 'var(--bg-color)', borderRadius: '12px', padding: '12px' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--hint-color)', marginBottom: '4px' }}>Started At</div>
+                  <div style={{ fontSize: '14px', fontWeight: '700' }}>{shiftStartedAt ? formatDisplayDateTime(shiftStartedAt) : 'Not started'}</div>
+                </div>
+                <div style={{ backgroundColor: 'var(--bg-color)', borderRadius: '12px', padding: '12px' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--hint-color)', marginBottom: '4px' }}>Break Time</div>
+                  <div style={{ fontSize: '14px', fontWeight: '700' }}>{formatDuration(totalBreakSeconds)}</div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button onClick={toggleShift} style={{ flex: 1, padding: '16px', borderRadius: '16px', backgroundColor: isShiftActive ? 'var(--danger-color)' : 'var(--success-color)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', fontWeight: 'bold', fontSize: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }}>
+                  {isShiftActive ? <><Square size={22} fill="white"/> End Shift</> : <><Play size={22} fill="white"/> Start Shift</>}
+                </button>
+                <button
+                  onClick={toggleBreak}
+                  disabled={!isShiftActive}
+                  style={{ width: '112px', padding: '16px 10px', borderRadius: '16px', backgroundColor: !isShiftActive ? 'var(--bg-color)' : isOnBreak ? 'rgba(82, 196, 26, 0.12)' : 'rgba(255, 77, 79, 0.12)', color: !isShiftActive ? 'var(--hint-color)' : isOnBreak ? 'var(--success-color)' : 'var(--danger-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 'bold', fontSize: '14px', opacity: !isShiftActive ? 0.7 : 1 }}
+                >
+                  {isOnBreak ? <><PlayCircle size={18} /> Resume</> : <><Pause size={18} /> Pause</>}
+                </button>
+              </div>
             </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' }}>
-              <div className="card"><div style={{ color: 'var(--hint-color)', fontSize: '11px' }}>Weekly Hours</div><div style={{ fontSize: '20px', fontWeight: 'bold' }}>38.5h</div></div>
-              <div className="card"><div style={{ color: 'var(--hint-color)', fontSize: '11px' }}>Today's Sales</div><div style={{ fontSize: '20px', fontWeight: 'bold' }}>€1,240</div></div>
+              <div className="card"><div style={{ color: 'var(--hint-color)', fontSize: '11px', marginBottom: '4px' }}>Today Sales</div><div style={{ fontSize: '20px', fontWeight: 'bold' }}>€{todaySalesTotal.toFixed(2)}</div></div>
+              <div className="card"><div style={{ color: 'var(--hint-color)', fontSize: '11px', marginBottom: '4px' }}>Orders</div><div style={{ fontSize: '20px', fontWeight: 'bold' }}>{todayOrders.length}</div></div>
+              <div className="card"><div style={{ color: 'var(--hint-color)', fontSize: '11px', marginBottom: '4px' }}>Avg Ticket</div><div style={{ fontSize: '20px', fontWeight: 'bold' }}>€{averageTicket.toFixed(2)}</div></div>
+              <div className="card"><div style={{ color: 'var(--hint-color)', fontSize: '11px', marginBottom: '4px' }}>Items Sold</div><div style={{ fontSize: '20px', fontWeight: 'bold' }}>{todayItemsCount}</div></div>
+            </div>
+
+            <div style={{ marginTop: '20px' }}>
+              <h4 style={{ marginBottom: '12px' }}>Quick Actions</h4>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <button onClick={() => setActiveTab('checkout')} className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '16px', fontWeight: 'bold', color: 'var(--button-color)' }}>
+                  <ShoppingCart size={18} /> Go to Checkout
+                </button>
+                <button onClick={() => setActiveTab('history')} className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '16px', fontWeight: 'bold', color: 'var(--button-color)' }}>
+                  <Receipt size={18} /> View Orders
+                </button>
+              </div>
+            </div>
+
+            <div style={{ marginTop: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                <Activity size={18} color="var(--button-color)" />
+                <h4 style={{ margin: 0 }}>Shift Activity</h4>
+              </div>
+              <div className="card" style={{ padding: '0' }}>
+                {shiftActivity.length > 0 ? (
+                  shiftActivity.map((entry, idx) => (
+                    <div key={entry.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderBottom: idx !== shiftActivity.length - 1 ? '1px solid var(--bg-color)' : 'none' }}>
+                      <div>
+                        <div style={{ fontSize: '14px', fontWeight: '600' }}>{entry.label}</div>
+                        <div style={{ fontSize: '12px', color: 'var(--hint-color)', marginTop: '2px' }}>{entry.time}</div>
+                      </div>
+                      <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: entry.tone, flexShrink: 0 }} />
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ padding: '16px', color: 'var(--hint-color)', fontSize: '13px' }}>
+                    Start your shift to begin tracking activity and breaks.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={{ marginTop: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                <Coffee size={18} color="var(--button-color)" />
+                <h4 style={{ margin: 0 }}>Weekly Overview</h4>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="card"><div style={{ color: 'var(--hint-color)', fontSize: '11px', marginBottom: '4px' }}>Weekly Hours</div><div style={{ fontSize: '20px', fontWeight: 'bold' }}>38.5h</div></div>
+                <div className="card"><div style={{ color: 'var(--hint-color)', fontSize: '11px', marginBottom: '4px' }}>Breaks Today</div><div style={{ fontSize: '20px', fontWeight: 'bold' }}>{breakEntries.length}</div></div>
+              </div>
             </div>
           </motion.div>
         );
@@ -259,7 +514,7 @@ export const SellerDashboard: React.FC = () => {
       case 'settings':
         return (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <h3>Settings</h3>
+            <h3 style={{ fontSize: '24px' }}>Settings</h3>
             <h4 style={{ color: 'var(--hint-color)', fontSize: '12px', textTransform: 'uppercase', marginBottom: '12px', marginLeft: '4px' }}>Appearance</h4>
             <div className="card" style={{ padding: '4px', display: 'flex', gap: '4px', backgroundColor: 'var(--secondary-bg-color)' }}>
               <ThemeButton active={theme === 'light'} onClick={() => setTheme('light')} icon={<Sun size={18} />} label="Light" />
@@ -277,12 +532,7 @@ export const SellerDashboard: React.FC = () => {
 
   return (
     <div className="container" style={{ paddingBottom: '100px', paddingTop: '10px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <div><h2 style={{ fontSize: '20px', marginBottom: 0 }}>{currentStore?.name}</h2><div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: isShiftActive ? 'var(--success-color)' : 'var(--danger-color)' }} /><span style={{ fontSize: '12px', color: 'var(--hint-color)' }}>{isShiftActive ? 'Shift Active' : 'Shift Closed'}</span></div></div>
-        <div style={{ backgroundColor: 'var(--secondary-bg-color)', padding: '6px 10px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}><User size={16} /><span style={{ fontSize: '13px', fontWeight: 'bold' }}>John</span></div>
-      </div>
-      
-      <div style={{ minHeight: 'calc(100vh - 180px)' }}>{renderContent()}</div>
+      <div style={{ minHeight: 'calc(100vh - 120px)' }}>{renderContent()}</div>
 
       <AnimatePresence>
         {activeTab === 'checkout' && cartItemsCount > 0 && (
@@ -325,9 +575,20 @@ export const SellerDashboard: React.FC = () => {
                       <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', padding: '12px', backgroundColor: 'var(--secondary-bg-color)', borderRadius: '12px' }}>
                         <div style={{ flex: 1 }}>
                           <div style={{ fontWeight: 'bold', fontSize: '15px' }}>{item.name}</div>
-                          <div style={{ fontSize: '13px', color: 'var(--button-color)', fontWeight: 'bold' }}>€{(item.price * item.quantity).toFixed(2)}</div>
+                          <div style={{ fontSize: '13px', color: 'var(--button-color)', fontWeight: 'bold' }}>€{(item.unitPrice * item.quantity).toFixed(2)}</div>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px' }}>
+                          <div style={{ width: '88px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+                            <div style={{ fontSize: '10px', color: 'var(--hint-color)', marginBottom: '6px', textAlign: 'center', lineHeight: 1 }}>Unit Price</div>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.unitPrice.toFixed(2)}
+                              onChange={(e) => updateUnitPrice(item.id, Number.parseFloat(e.target.value))}
+                              style={{ marginBottom: 0, height: '32px', padding: '0 10px', textAlign: 'center', fontSize: '13px', fontWeight: '700' }}
+                            />
+                          </div>
                           <button onClick={() => updateQuantity(item.id, item.quantity - 1)} style={{ width: '32px', height: '32px', backgroundColor: 'var(--bg-color)', borderRadius: '8px' }}><Minus size={18}/></button>
                           <span style={{ fontWeight: '900', minWidth: '24px', textAlign: 'center', fontSize: '16px' }}>{item.quantity}</span>
                           <button onClick={() => updateQuantity(item.id, item.quantity + 1)} style={{ width: '32px', height: '32px', backgroundColor: 'var(--bg-color)', borderRadius: '8px' }}><Plus size={18}/></button>

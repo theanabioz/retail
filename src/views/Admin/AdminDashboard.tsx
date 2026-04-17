@@ -46,20 +46,48 @@ interface SaleRecord {
   items: string;
 }
 
+interface StaffActivityRecord {
+  id: string;
+  sellerId: string;
+  type: 'shift_start' | 'sale' | 'break_start' | 'break_end' | 'shift_end';
+  title: string;
+  time: string;
+  date: string;
+  meta: string;
+}
+
 // Global Mock Sales Feed
 const mockSalesFeed: SaleRecord[] = [
-  { id: '101', storeId: '1', storeName: 'Central Mall', date: '2026-04-17', time: '14:25', total: 24.50, items: '1x Herbal Oil 10ml' },
-  { id: '102', storeId: '2', storeName: 'City Station', date: '2026-04-17', time: '14:10', total: 29.90, items: '1x Aroma Cartridge' },
-  { id: '103', storeId: '1', storeName: 'Central Mall', date: '2026-04-17', time: '13:45', total: 27.00, items: '2x Pre-Rolled Herbal Stick, 1x Herbal Blend 1g' },
-  { id: '104', storeId: '2', storeName: 'City Station', date: '2026-04-17', time: '13:15', total: 39.00, items: '1x Starter Kit' },
-  { id: '105', storeId: '1', storeName: 'Central Mall', date: '2026-04-17', time: '12:50', total: 17.90, items: '1x Terpene Drops' },
-  { id: '106', storeId: '2', storeName: 'City Station', date: '2026-04-16', time: '18:35', total: 21.00, items: '1x Relax Gummies 20pcs' },
-  { id: '107', storeId: '1', storeName: 'Central Mall', date: '2026-04-16', time: '17:05', total: 45.80, items: '2x Herbal Blend 3g' },
-  { id: '108', storeId: '2', storeName: 'City Station', date: '2026-04-16', time: '16:40', total: 55.00, items: '2x Premium Flower Pack' },
-  { id: '109', storeId: '1', storeName: 'Central Mall', date: '2026-04-15', time: '15:15', total: 19.50, items: '1x Botanical Balm 30g' },
-  { id: '110', storeId: '2', storeName: 'City Station', date: '2026-04-15', time: '13:55', total: 26.70, items: '3x Herbal Blend 1g' },
-  { id: '111', storeId: '1', storeName: 'Central Mall', date: '2026-04-14', time: '11:20', total: 33.00, items: '1x Relax Gummies 20pcs, 2x Pre-Rolled Herbal Stick' },
-  { id: '112', storeId: '2', storeName: 'City Station', date: '2026-04-14', time: '09:50', total: 24.90, items: '1x Herbal Oil 10ml' },
+  { id: '101', storeId: '1', storeName: 'Old Town Cannabis Shop', date: '2026-04-17', time: '14:25', total: 24.50, items: '1x Herbal Oil 10ml' },
+  { id: '102', storeId: '2', storeName: 'Beach Cannabis Shop', date: '2026-04-17', time: '14:10', total: 29.90, items: '1x Aroma Cartridge' },
+  { id: '103', storeId: '1', storeName: 'Old Town Cannabis Shop', date: '2026-04-17', time: '13:45', total: 27.00, items: '2x Pre-Rolled Herbal Stick, 1x Herbal Blend 1g' },
+  { id: '104', storeId: '2', storeName: 'Beach Cannabis Shop', date: '2026-04-17', time: '13:15', total: 39.00, items: '1x Starter Kit' },
+  { id: '105', storeId: '1', storeName: 'Old Town Cannabis Shop', date: '2026-04-17', time: '12:50', total: 17.90, items: '1x Terpene Drops' },
+  { id: '106', storeId: '2', storeName: 'Beach Cannabis Shop', date: '2026-04-16', time: '18:35', total: 21.00, items: '1x Relax Gummies 20pcs' },
+  { id: '107', storeId: '1', storeName: 'Old Town Cannabis Shop', date: '2026-04-16', time: '17:05', total: 45.80, items: '2x Herbal Blend 3g' },
+  { id: '108', storeId: '2', storeName: 'Beach Cannabis Shop', date: '2026-04-16', time: '16:40', total: 55.00, items: '2x Premium Flower Pack' },
+  { id: '109', storeId: '1', storeName: 'Old Town Cannabis Shop', date: '2026-04-15', time: '15:15', total: 19.50, items: '1x Botanical Balm 30g' },
+  { id: '110', storeId: '2', storeName: 'Beach Cannabis Shop', date: '2026-04-15', time: '13:55', total: 26.70, items: '3x Herbal Blend 1g' },
+  { id: '111', storeId: '1', storeName: 'Old Town Cannabis Shop', date: '2026-04-14', time: '11:20', total: 33.00, items: '1x Relax Gummies 20pcs, 2x Pre-Rolled Herbal Stick' },
+  { id: '112', storeId: '2', storeName: 'Beach Cannabis Shop', date: '2026-04-14', time: '09:50', total: 24.90, items: '1x Herbal Oil 10ml' },
+];
+
+const formatDisplayDate = (date: string) =>
+  new Date(`${date}T00:00:00`).toLocaleDateString('en-GB');
+
+const mockStaffActivityFeed: StaffActivityRecord[] = [
+  { id: 'a1', sellerId: 's1', type: 'shift_start', title: 'Shift started', date: '2026-04-17', time: '08:58', meta: 'Old Town Cannabis Shop' },
+  { id: 'a2', sellerId: 's1', type: 'sale', title: 'Sale completed', date: '2026-04-17', time: '09:14', meta: '€24.50 • 1x Herbal Oil 10ml' },
+  { id: 'a3', sellerId: 's1', type: 'break_start', title: 'Break started', date: '2026-04-17', time: '10:30', meta: 'Lunch break' },
+  { id: 'a4', sellerId: 's1', type: 'break_end', title: 'Break ended', date: '2026-04-17', time: '10:52', meta: 'Back on shift' },
+  { id: 'a5', sellerId: 's1', type: 'sale', title: 'Sale completed', date: '2026-04-17', time: '11:25', meta: '€17.90 • 1x Terpene Drops' },
+  { id: 'a6', sellerId: 's1', type: 'sale', title: 'Sale completed', date: '2026-04-17', time: '12:45', meta: '€54.80 • 4 positions' },
+  { id: 'a7', sellerId: 's2', type: 'shift_start', title: 'Shift started', date: '2026-04-17', time: '09:40', meta: 'Beach Cannabis Shop' },
+  { id: 'a8', sellerId: 's2', type: 'sale', title: 'Sale completed', date: '2026-04-17', time: '10:05', meta: '€29.90 • 1x Aroma Cartridge' },
+  { id: 'a9', sellerId: 's2', type: 'break_start', title: 'Break started', date: '2026-04-17', time: '11:15', meta: 'Short break' },
+  { id: 'a10', sellerId: 's2', type: 'break_end', title: 'Break ended', date: '2026-04-17', time: '11:28', meta: 'Back on shift' },
+  { id: 'a11', sellerId: 's2', type: 'sale', title: 'Sale completed', date: '2026-04-17', time: '13:20', meta: '€56.70 • 4 positions' },
+  { id: 'a12', sellerId: 's3', type: 'shift_end', title: 'Shift ended', date: '2026-04-16', time: '18:02', meta: 'Old Town Cannabis Shop' },
 ];
 
 // Mock data factories
@@ -114,6 +142,7 @@ export const AdminDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AdminTab>('stats');
   const [detailStore, setDetailStore] = useState<StoreType | null>(null);
   const [detailStaff, setDetailStaff] = useState<StaffMember | null>(null);
+  const [detailStaffTab, setDetailStaffTab] = useState<'history' | 'activity'>('history');
   const [storeDetailTab, setStoreDetailTab] = useState<'performance' | 'stock'>('performance');
   const [timeRange, setTimeRange] = useState<TimeRange>('week');
   const [storeTimeRange, setStoreTimeRange] = useState<TimeRange>('week');
@@ -308,7 +337,7 @@ export const AdminDashboard: React.FC = () => {
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ fontSize: '12px', color: 'var(--hint-color)', fontWeight: '500' }}>{sale.time}</div>
-                        <div style={{ fontSize: '10px', color: 'var(--hint-color)', marginTop: '2px' }}>{sale.date}</div>
+                        <div style={{ fontSize: '10px', color: 'var(--hint-color)', marginTop: '2px' }}>{formatDisplayDate(sale.date)}</div>
                       </div>
                     </div>
                   ))
@@ -324,7 +353,7 @@ export const AdminDashboard: React.FC = () => {
 
         return (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} key="stats">
-            <h3 style={{ fontSize: '24px', marginBottom: '16px' }}>Global Performance</h3>
+            <h3 style={{ fontSize: '24px', marginBottom: '16px' }}>Dashboard</h3>
             <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
             <div className="card" style={{ height: '220px', padding: '16px 8px 16px 0' }}>
               <ResponsiveContainer width="100%" height="100%">
@@ -393,7 +422,10 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             <div style={{ marginTop: '24px' }}>
-              <h4 style={{ marginBottom: '12px' }}>Store Performance</h4>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                <Store size={18} color="var(--button-color)" />
+                <h4 style={{ margin: 0 }}>Store Performance</h4>
+              </div>
               {stores.map((s, idx) => (
                 <div key={s.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><Store size={16} color="var(--button-color)" /><span style={{ fontSize: '14px' }}>{s.name}</span></div>
@@ -512,7 +544,7 @@ export const AdminDashboard: React.FC = () => {
                             </div>
                             <div style={{ textAlign: 'right' }}>
                               <div style={{ fontSize: '12px', color: 'var(--hint-color)' }}>{sale.time}</div>
-                              <div style={{ fontSize: '10px', color: 'var(--hint-color)', marginTop: '2px' }}>{sale.date}</div>
+                              <div style={{ fontSize: '10px', color: 'var(--hint-color)', marginTop: '2px' }}>{formatDisplayDate(sale.date)}</div>
                             </div>
                           </div>
                         ))
@@ -677,15 +709,47 @@ export const AdminDashboard: React.FC = () => {
             {!detailStaff ? (
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} key="staff-list">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}><h3 style={{ fontSize: '24px' }}>Staff</h3><button onClick={() => { setEditingStaff(null); setStaffFormData({ name: '', storeId: stores[0]?.id || '' }); setIsStaffEditorOpen(true); }} style={{ backgroundColor: 'var(--button-color)', color: 'white', padding: '8px 16px', borderRadius: '12px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}><UserPlus size={18} /> Add Staff</button></div>
-                <div style={{ display: 'grid', gap: '12px' }}>{staff.map(member => (<div key={member.id} className="card" onClick={() => setDetailStaff(member)} style={{ display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer' }}><div style={{ position: 'relative' }}><div style={{ backgroundColor: 'var(--secondary-bg-color)', padding: '12px', borderRadius: '50%' }}><Users size={24} color="var(--button-color)" /></div><div style={{ position: 'absolute', bottom: 0, right: 0, width: '12px', height: '12px', borderRadius: '50%', backgroundColor: member.status === 'online' ? 'var(--success-color)' : 'var(--hint-color)', border: '2px solid var(--bg-color)' }} /></div><div style={{ flex: 1 }}><div style={{ fontWeight: 'bold' }}>{member.name}</div><div style={{ fontSize: '12px', color: 'var(--hint-color)' }}>{stores.find(s => s.id === member.storeId)?.name}</div></div><ChevronRight size={20} color="var(--hint-color)" /></div>))}</div>
+                <div style={{ display: 'grid', gap: '12px' }}>{staff.map(member => (<div key={member.id} className="card" onClick={() => { setDetailStaff(member); setDetailStaffTab('history'); }} style={{ display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer' }}><div style={{ position: 'relative' }}><div style={{ backgroundColor: 'var(--secondary-bg-color)', padding: '12px', borderRadius: '50%' }}><Users size={24} color="var(--button-color)" /></div><div style={{ position: 'absolute', bottom: 0, right: 0, width: '12px', height: '12px', borderRadius: '50%', backgroundColor: member.status === 'online' ? 'var(--success-color)' : 'var(--hint-color)', border: '2px solid var(--bg-color)' }} /></div><div style={{ flex: 1 }}><div style={{ fontWeight: 'bold' }}>{member.name}</div><div style={{ fontSize: '12px', color: 'var(--hint-color)' }}>{stores.find(s => s.id === member.storeId)?.name}</div></div><ChevronRight size={20} color="var(--hint-color)" /></div>))}</div>
                 <StaffEditor isOpen={isStaffEditorOpen} onClose={() => setIsStaffEditorOpen(false)} onSave={handleSaveStaff} formData={staffFormData} setFormData={setStaffFormData} stores={stores} isEdit={!!editingStaff} />
               </motion.div>
             ) : (
               <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} key="staff-detail">
                 <button onClick={() => setDetailStaff(null)} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--button-color)', background: 'none', marginBottom: '20px', padding: 0 }}><ArrowLeft size={18} /> Back</button>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}><div style={{ backgroundColor: 'var(--secondary-bg-color)', padding: '20px', borderRadius: '50%' }}><Users size={32} color="var(--button-color)" /></div><div><h2 style={{ marginBottom: '4px' }}>{detailStaff.name}</h2><span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '10px', backgroundColor: detailStaff.status === 'online' ? '#e6f7ed' : '#f0f0f0', color: detailStaff.status === 'online' ? 'var(--success-color)' : 'var(--hint-color)', fontWeight: 'bold' }}>{detailStaff.status.toUpperCase()}</span></div></div>
-                <h3>Shift History</h3>
-                {shifts.filter(s => s.sellerId === detailStaff.id).map(shift => (<div key={shift.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px' }}><div><div style={{ fontWeight: '600', fontSize: '14px' }}>{new Date(shift.start).toLocaleDateString()}</div><div style={{ fontSize: '12px', color: 'var(--hint-color)' }}>{new Date(shift.start).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - {shift.end ? new Date(shift.end).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Active'}</div></div><div style={{ fontWeight: 'bold', color: 'var(--button-color)' }}>{shift.end ? `${((new Date(shift.end).getTime() - new Date(shift.start).getTime()) / (1000 * 60 * 60)).toFixed(1)}h` : '...'}</div></div>))}
+                <div style={{ display: 'flex', backgroundColor: 'var(--secondary-bg-color)', padding: '4px', borderRadius: '14px', marginBottom: '20px' }}>
+                  <button onClick={() => setDetailStaffTab('history')} style={{ flex: 1, padding: '10px', borderRadius: '10px', fontSize: '14px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: detailStaffTab === 'history' ? 'var(--bg-color)' : 'transparent', color: detailStaffTab === 'history' ? 'var(--button-color)' : 'var(--hint-color)', transition: '0.2s' }}><Clock size={18}/> Shift History</button>
+                  <button onClick={() => setDetailStaffTab('activity')} style={{ flex: 1, padding: '10px', borderRadius: '10px', fontSize: '14px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: detailStaffTab === 'activity' ? 'var(--bg-color)' : 'transparent', color: detailStaffTab === 'activity' ? 'var(--button-color)' : 'var(--hint-color)', transition: '0.2s' }}><Receipt size={18}/> Activity Feed</button>
+                </div>
+                {detailStaffTab === 'history' ? (
+                  <>
+                    <h3>Shift History</h3>
+                    {shifts.filter(s => s.sellerId === detailStaff.id).map(shift => (<div key={shift.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px' }}><div><div style={{ fontWeight: '600', fontSize: '14px' }}>{new Date(shift.start).toLocaleDateString('en-GB')}</div><div style={{ fontSize: '12px', color: 'var(--hint-color)' }}>{new Date(shift.start).toLocaleTimeString('en-GB', {hour: '2-digit', minute:'2-digit', hour12: false})} - {shift.end ? new Date(shift.end).toLocaleTimeString('en-GB', {hour: '2-digit', minute:'2-digit', hour12: false}) : 'Active'}</div></div><div style={{ fontWeight: 'bold', color: 'var(--button-color)' }}>{shift.end ? `${((new Date(shift.end).getTime() - new Date(shift.start).getTime()) / (1000 * 60 * 60)).toFixed(1)}h` : '...'}</div></div>))}
+                  </>
+                ) : (
+                  <>
+                    <h3>Activity Feed</h3>
+                    <div className="card" style={{ padding: '0' }}>
+                      {mockStaffActivityFeed.filter((entry) => entry.sellerId === detailStaff.id).length > 0 ? (
+                        [...mockStaffActivityFeed.filter((entry) => entry.sellerId === detailStaff.id)].reverse().map((entry, idx, arr) => (
+                          <div key={entry.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderBottom: idx !== arr.length - 1 ? '1px solid var(--bg-color)' : 'none' }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: '600', fontSize: '14px' }}>{entry.title}</div>
+                              <div style={{ fontSize: '12px', color: 'var(--hint-color)', marginTop: '2px' }}>{entry.meta}</div>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontSize: '12px', color: 'var(--hint-color)', fontWeight: '600' }}>{entry.time}</div>
+                              <div style={{ fontSize: '10px', color: 'var(--hint-color)', marginTop: '2px' }}>{formatDisplayDate(entry.date)}</div>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ padding: '16px', color: 'var(--hint-color)', fontSize: '13px' }}>
+                          No live activity yet for this staff member.
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
