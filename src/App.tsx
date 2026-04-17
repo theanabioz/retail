@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuthStore } from './store/useAuthStore';
 import { useInventoryStore } from './store/useInventoryStore';
 import { useSettingsStore } from './store/useSettingsStore';
@@ -10,6 +10,7 @@ import { AdminDashboard } from './views/Admin/AdminDashboard';
 import './index.css';
 
 function App() {
+  const [authError, setAuthError] = useState<string | null>(null);
   const { role, setAuthenticatedUser } = useAuthStore();
   const { theme } = useSettingsStore();
   const { stores, hasLoadedCatalog, loadCatalog } = useInventoryStore();
@@ -38,6 +39,8 @@ function App() {
       return;
     }
 
+    setAuthError(null);
+
     void authenticateTelegram()
       .then((user) => {
         const mappedAssignedStoreIds = user.assignedStoreIds
@@ -54,10 +57,11 @@ function App() {
       })
       .catch((error) => {
         console.error('Telegram auth failed', error);
+        setAuthError(error instanceof Error ? error.message : 'Telegram authentication failed.');
       });
   }, [hasLoadedCatalog, role, setAuthenticatedUser, stores, tg?.initData]);
 
-  if (tg?.initData && !role) {
+  if (tg?.initData && !role && !authError) {
     return (
       <div className="container" style={{ textAlign: 'center', paddingTop: '64px' }}>
         <h1>Signing In</h1>
@@ -76,6 +80,7 @@ function App() {
           telegramUserId: user?.id ? String(user.id) : null,
           platform: tg?.platform ?? null,
         }}
+        authError={authError}
       />
     );
   }

@@ -9,9 +9,10 @@ interface RoleSelectorProps {
     telegramUserId: string | null;
     platform: string | null;
   };
+  authError?: string | null;
 }
 
-export const RoleSelector: React.FC<RoleSelectorProps> = ({ diagnostics }) => {
+export const RoleSelector: React.FC<RoleSelectorProps> = ({ diagnostics, authError }) => {
   return (
     <div className="container" style={{ textAlign: 'center', paddingTop: '56px' }}>
       <ShieldCheck size={64} color="var(--button-color)" style={{ marginBottom: '20px' }} />
@@ -29,6 +30,24 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ diagnostics }) => {
           This production build accepts only Telegram Mini App authentication. Launch it from your bot to continue.
         </div>
       </div>
+
+      {authError ? (
+        <div
+          className="card"
+          style={{
+            marginTop: '16px',
+            padding: '16px',
+            textAlign: 'left',
+            fontSize: '12px',
+            color: '#b42318',
+            background: '#fff5f5',
+            border: '1px solid #fecaca',
+          }}
+        >
+          <div style={{ fontWeight: '700', marginBottom: '6px', color: '#991b1b' }}>Auth Error</div>
+          <div style={{ lineHeight: 1.5 }}>{authError}</div>
+        </div>
+      ) : null}
 
       <div
         className="card"
