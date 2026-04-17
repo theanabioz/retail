@@ -120,6 +120,15 @@ const formatDuration = (seconds: number) => {
   return [hours, minutes, secs].map((value) => value.toString().padStart(2, '0')).join(':');
 };
 
+const fadeTransition = { duration: 0.18, ease: 'easeOut' as const };
+const sheetTransition = { duration: 0.24, ease: [0.22, 1, 0.36, 1] as const };
+const sheetSurfaceStyle = {
+  willChange: 'transform',
+  transform: 'translateZ(0)',
+  backfaceVisibility: 'hidden' as const,
+  boxShadow: '0 -6px 24px rgba(0,0,0,0.14)',
+};
+
 export const SellerDashboard: React.FC = () => {
   const { logout, currentStoreId } = useAuthStore();
   const { products, updateStock } = useInventoryStore();
@@ -133,10 +142,11 @@ export const SellerDashboard: React.FC = () => {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isSavingStock, setIsSavingStock] = useState(false);
   const [isCartExpanded, setIsCartExpanded] = useState(false);
+  const [priceEditorItemId, setPriceEditorItemId] = useState<string | null>(null);
+  const [priceEditorValue, setPriceEditorValue] = useState('');
   const [orderFilter, setOrderFilter] = useState<OrderFilter>('today');
   const [selectedOrdersFromDate, setSelectedOrdersFromDate] = useState('2026-04-15');
   const [selectedOrdersToDate, setSelectedOrdersToDate] = useState('2026-04-17');
-  const [now, setNow] = useState(() => Date.now());
 
   const filteredProducts = products.filter(p => 
     p.name.toLowerCase().includes(search.toLowerCase()) || p.barcode.includes(search)
@@ -168,50 +178,14 @@ export const SellerDashboard: React.FC = () => {
   const todaySalesTotal = todayOrders.reduce((sum, order) => sum + order.total, 0);
   const todayItemsCount = todayOrders.reduce((sum, order) => sum + order.items.reduce((itemSum, item) => itemSum + item.quantity, 0), 0);
   const averageTicket = todayOrders.length > 0 ? todaySalesTotal / todayOrders.length : 0;
-  const totalBreakSeconds = breakEntries.reduce((sum, entry) => {
-    const endTime = entry.end ? new Date(entry.end).getTime() : now;
-    return sum + Math.max(0, Math.floor((endTime - new Date(entry.start).getTime()) / 1000));
-  }, 0);
-  const shiftDurationSeconds = shiftStartedAt ? Math.max(0, Math.floor((now - new Date(shiftStartedAt).getTime()) / 1000)) : 0;
-  const activeWorkSeconds = Math.max(0, shiftDurationSeconds - totalBreakSeconds);
 
-  const shiftActivity = [
-    ...(shiftStartedAt
-      ? [{
-          id: 'shift-started',
-          label: 'Shift started',
-          time: formatDisplayDateTime(shiftStartedAt),
-          tone: 'var(--button-color)',
-        }]
-      : []),
-    ...breakEntries.map((entry, index) => ({
-      id: entry.id,
-      label: entry.end ? `Break ${index + 1} completed` : `Break ${index + 1} in progress`,
-      time: entry.end
-        ? `${formatTimeOnly(entry.start)} - ${formatTimeOnly(entry.end)}`
-        : `Started at ${formatTimeOnly(entry.start)}`,
-      tone: entry.end ? 'var(--hint-color)' : 'var(--danger-color)',
-    })),
-    ...(todayOrders[0]
-      ? [{
-          id: 'last-sale',
-          label: 'Latest sale today',
-          time: `${formatDisplayDate(todayOrders[0].date)} • ${todayOrders[0].time}`,
-          tone: 'var(--success-color)',
-        }]
-      : []),
-  ];
+  const priceEditorItem = cart.find((item) => item.id === priceEditorItemId) ?? null;
 
   useEffect(() => {
     if (cartItemsCount === 0) {
       setIsCartExpanded(false);
     }
   }, [cartItemsCount]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   const handleAddToCart = (product: any) => {
     addToCart(product);
@@ -240,6 +214,68 @@ export const SellerDashboard: React.FC = () => {
       tg.HapticFeedback.notificationOccurred('success');
     }
     setTimeout(() => setIsSavingStock(false), 2000);
+  };
+
+  const openPriceEditor = (itemId: string, unitPrice: number) => {
+    setPriceEditorItemId(itemId);
+    setPriceEditorValue(unitPrice.toFixed(2));
+  };
+
+  const closePriceEditor = () => {
+    setPriceEditorItemId(null);
+    setPriceEditorValue('');
+  };
+
+  const handlePriceKeypad = (key: string) => {
+    if (key === 'clear') {
+      setPriceEditorValue('');
+      return;
+    }
+
+    if (key === 'backspace') {
+      setPriceEditorValue((current) => current.slice(0, -1));
+      return;
+    }
+
+    if (key === '.') {
+      setPriceEditorValue((current) => (current.includes('.') ? current : `${current || '0'}.`));
+      return;
+    }
+
+    if (key === '00') {
+      setPriceEditorValue((current) => {
+        const next = `${current || '0'}00`;
+        return next;
+      });
+      return;
+    }
+
+    setPriceEditorValue((current) => {
+      if (current === '0') {
+        return key;
+      }
+      return `${current}${key}`;
+    });
+  };
+
+  const applyPriceEditor = () => {
+    if (!priceEditorItem) {
+      return;
+    }
+
+    const parsed = Number.parseFloat(priceEditorValue);
+    if (Number.isFinite(parsed)) {
+      updateUnitPrice(priceEditorItem.id, parsed);
+    }
+    closePriceEditor();
+  };
+
+  const resetPriceEditor = () => {
+    if (!priceEditorItem) {
+      return;
+    }
+
+    setPriceEditorValue(priceEditorItem.price.toFixed(2));
   };
 
   const renderContent = () => {
@@ -411,104 +447,20 @@ export const SellerDashboard: React.FC = () => {
 
       case 'shift':
         return (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <h3 style={{ fontSize: '24px' }}>Shift Management</h3>
-
-            <div className="card" style={{ padding: '20px', marginTop: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '18px' }}>
-                <div>
-                  <div style={{ fontSize: '12px', color: 'var(--hint-color)', textTransform: 'uppercase', marginBottom: '6px' }}>Current Shift</div>
-                  <div style={{ fontSize: '28px', fontWeight: '900', lineHeight: 1.1, color: 'var(--text-color)' }}>
-                    {formatDuration(activeWorkSeconds)}
-                  </div>
-                </div>
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '7px 10px', borderRadius: '999px', backgroundColor: 'var(--bg-color)' }}>
-                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: isShiftActive ? (isOnBreak ? 'var(--danger-color)' : 'var(--success-color)') : 'var(--hint-color)' }} />
-                  <span style={{ fontSize: '12px', fontWeight: '700', color: isShiftActive ? (isOnBreak ? 'var(--danger-color)' : 'var(--success-color)') : 'var(--hint-color)' }}>
-                    {isShiftActive ? (isOnBreak ? 'On Break' : 'Shift Active') : 'Shift Closed'}
-                  </span>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '18px' }}>
-                <div style={{ backgroundColor: 'var(--bg-color)', borderRadius: '12px', padding: '12px' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--hint-color)', marginBottom: '4px' }}>Started At</div>
-                  <div style={{ fontSize: '14px', fontWeight: '700' }}>{shiftStartedAt ? formatDisplayDateTime(shiftStartedAt) : 'Not started'}</div>
-                </div>
-                <div style={{ backgroundColor: 'var(--bg-color)', borderRadius: '12px', padding: '12px' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--hint-color)', marginBottom: '4px' }}>Break Time</div>
-                  <div style={{ fontSize: '14px', fontWeight: '700' }}>{formatDuration(totalBreakSeconds)}</div>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button onClick={toggleShift} style={{ flex: 1, padding: '16px', borderRadius: '16px', backgroundColor: isShiftActive ? 'var(--danger-color)' : 'var(--success-color)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', fontWeight: 'bold', fontSize: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }}>
-                  {isShiftActive ? <><Square size={22} fill="white"/> End Shift</> : <><Play size={22} fill="white"/> Start Shift</>}
-                </button>
-                <button
-                  onClick={toggleBreak}
-                  disabled={!isShiftActive}
-                  style={{ width: '112px', padding: '16px 10px', borderRadius: '16px', backgroundColor: !isShiftActive ? 'var(--bg-color)' : isOnBreak ? 'rgba(82, 196, 26, 0.12)' : 'rgba(255, 77, 79, 0.12)', color: !isShiftActive ? 'var(--hint-color)' : isOnBreak ? 'var(--success-color)' : 'var(--danger-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 'bold', fontSize: '14px', opacity: !isShiftActive ? 0.7 : 1 }}
-                >
-                  {isOnBreak ? <><PlayCircle size={18} /> Resume</> : <><Pause size={18} /> Pause</>}
-                </button>
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' }}>
-              <div className="card"><div style={{ color: 'var(--hint-color)', fontSize: '11px', marginBottom: '4px' }}>Today Sales</div><div style={{ fontSize: '20px', fontWeight: 'bold' }}>€{todaySalesTotal.toFixed(2)}</div></div>
-              <div className="card"><div style={{ color: 'var(--hint-color)', fontSize: '11px', marginBottom: '4px' }}>Orders</div><div style={{ fontSize: '20px', fontWeight: 'bold' }}>{todayOrders.length}</div></div>
-              <div className="card"><div style={{ color: 'var(--hint-color)', fontSize: '11px', marginBottom: '4px' }}>Avg Ticket</div><div style={{ fontSize: '20px', fontWeight: 'bold' }}>€{averageTicket.toFixed(2)}</div></div>
-              <div className="card"><div style={{ color: 'var(--hint-color)', fontSize: '11px', marginBottom: '4px' }}>Items Sold</div><div style={{ fontSize: '20px', fontWeight: 'bold' }}>{todayItemsCount}</div></div>
-            </div>
-
-            <div style={{ marginTop: '20px' }}>
-              <h4 style={{ marginBottom: '12px' }}>Quick Actions</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <button onClick={() => setActiveTab('checkout')} className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '16px', fontWeight: 'bold', color: 'var(--button-color)' }}>
-                  <ShoppingCart size={18} /> Go to Checkout
-                </button>
-                <button onClick={() => setActiveTab('history')} className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '16px', fontWeight: 'bold', color: 'var(--button-color)' }}>
-                  <Receipt size={18} /> View Orders
-                </button>
-              </div>
-            </div>
-
-            <div style={{ marginTop: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                <Activity size={18} color="var(--button-color)" />
-                <h4 style={{ margin: 0 }}>Shift Activity</h4>
-              </div>
-              <div className="card" style={{ padding: '0' }}>
-                {shiftActivity.length > 0 ? (
-                  shiftActivity.map((entry, idx) => (
-                    <div key={entry.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderBottom: idx !== shiftActivity.length - 1 ? '1px solid var(--bg-color)' : 'none' }}>
-                      <div>
-                        <div style={{ fontSize: '14px', fontWeight: '600' }}>{entry.label}</div>
-                        <div style={{ fontSize: '12px', color: 'var(--hint-color)', marginTop: '2px' }}>{entry.time}</div>
-                      </div>
-                      <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: entry.tone, flexShrink: 0 }} />
-                    </div>
-                  ))
-                ) : (
-                  <div style={{ padding: '16px', color: 'var(--hint-color)', fontSize: '13px' }}>
-                    Start your shift to begin tracking activity and breaks.
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div style={{ marginTop: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                <Coffee size={18} color="var(--button-color)" />
-                <h4 style={{ margin: 0 }}>Weekly Overview</h4>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div className="card"><div style={{ color: 'var(--hint-color)', fontSize: '11px', marginBottom: '4px' }}>Weekly Hours</div><div style={{ fontSize: '20px', fontWeight: 'bold' }}>38.5h</div></div>
-                <div className="card"><div style={{ color: 'var(--hint-color)', fontSize: '11px', marginBottom: '4px' }}>Breaks Today</div><div style={{ fontSize: '20px', fontWeight: 'bold' }}>{breakEntries.length}</div></div>
-              </div>
-            </div>
-          </motion.div>
+          <ShiftManagementPanel
+            isShiftActive={isShiftActive}
+            shiftStartedAt={shiftStartedAt}
+            isOnBreak={isOnBreak}
+            breakEntries={breakEntries}
+            todayOrders={todayOrders}
+            todaySalesTotal={todaySalesTotal}
+            todayItemsCount={todayItemsCount}
+            averageTicket={averageTicket}
+            onToggleShift={toggleShift}
+            onToggleBreak={toggleBreak}
+            onGoToCheckout={() => setActiveTab('checkout')}
+            onGoToHistory={() => setActiveTab('history')}
+          />
         );
 
       case 'settings':
@@ -539,9 +491,10 @@ export const SellerDashboard: React.FC = () => {
           <>
             {!isCartExpanded && (
               <motion.div 
-                initial={{ y: 100 }} animate={{ y: 0 }} exit={{ y: 100 }}
+                initial={{ y: 72, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 72, opacity: 0 }}
+                transition={sheetTransition}
                 onClick={() => setIsCartExpanded(true)}
-                style={{ position: 'fixed', bottom: '80px', left: '16px', right: '16px', backgroundColor: 'var(--button-color)', borderRadius: '16px', padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'white', boxShadow: '0 8px 24px rgba(51, 144, 236, 0.3)', zIndex: 90, cursor: 'pointer' }}
+                style={{ position: 'fixed', bottom: '80px', left: '16px', right: '16px', backgroundColor: 'var(--button-color)', borderRadius: '16px', padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'white', boxShadow: '0 6px 18px rgba(51, 144, 236, 0.22)', zIndex: 90, cursor: 'pointer', willChange: 'transform', transform: 'translateZ(0)' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <div style={{ position: 'relative' }}>
@@ -559,11 +512,11 @@ export const SellerDashboard: React.FC = () => {
 
             {isCartExpanded && (
               <>
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsCartExpanded(false)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000 }}/>
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={fadeTransition} onClick={() => setIsCartExpanded(false)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000, willChange: 'opacity' }}/>
                 <motion.div 
                   initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-                  transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-                  style={{ position: 'fixed', bottom: 0, left: 0, right: 0, height: '85vh', backgroundColor: 'var(--bg-color)', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', padding: '24px', zIndex: 2001, boxShadow: '0 -10px 40px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column' }}
+                  transition={sheetTransition}
+                  style={{ position: 'fixed', bottom: 0, left: 0, right: 0, height: '85vh', backgroundColor: 'var(--bg-color)', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', padding: '24px', zIndex: 2001, display: 'flex', flexDirection: 'column', ...sheetSurfaceStyle }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                     <h3 style={{ margin: 0 }}>Review Items</h3>
@@ -572,26 +525,30 @@ export const SellerDashboard: React.FC = () => {
 
                   <div style={{ flex: 1, overflowY: 'auto', marginBottom: '20px' }}>
                     {cart.map(item => (
-                      <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', padding: '12px', backgroundColor: 'var(--secondary-bg-color)', borderRadius: '12px' }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 'bold', fontSize: '15px' }}>{item.name}</div>
-                          <div style={{ fontSize: '13px', color: 'var(--button-color)', fontWeight: 'bold' }}>€{(item.unitPrice * item.quantity).toFixed(2)}</div>
+                      <div key={item.id} style={{ marginBottom: '16px', padding: '12px', backgroundColor: 'var(--secondary-bg-color)', borderRadius: '12px' }}>
+                        <div style={{ marginBottom: '12px' }}>
+                          <div style={{ fontWeight: 'bold', fontSize: '15px', lineHeight: 1.3 }}>{item.name}</div>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px' }}>
-                          <div style={{ width: '88px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
-                            <div style={{ fontSize: '10px', color: 'var(--hint-color)', marginBottom: '6px', textAlign: 'center', lineHeight: 1 }}>Unit Price</div>
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={item.unitPrice.toFixed(2)}
-                              onChange={(e) => updateUnitPrice(item.id, Number.parseFloat(e.target.value))}
-                              style={{ marginBottom: 0, height: '32px', padding: '0 10px', textAlign: 'center', fontSize: '13px', fontWeight: '700' }}
-                            />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                            <button
+                              onClick={() => openPriceEditor(item.id, item.unitPrice)}
+                              style={{ minWidth: '84px', height: '32px', padding: '0 12px', borderRadius: '999px', backgroundColor: 'var(--bg-color)', color: 'var(--button-color)', fontSize: '13px', fontWeight: '800', flexShrink: 0 }}
+                            >
+                              €{item.unitPrice.toFixed(2)}
+                            </button>
+                            <div style={{ fontSize: '13px', color: 'var(--hint-color)', whiteSpace: 'nowrap' }}>
+                              x{item.quantity}
+                            </div>
+                            <div style={{ fontSize: '14px', color: 'var(--text-color)', fontWeight: '800', whiteSpace: 'nowrap' }}>
+                              €{(item.unitPrice * item.quantity).toFixed(2)}
+                            </div>
                           </div>
-                          <button onClick={() => updateQuantity(item.id, item.quantity - 1)} style={{ width: '32px', height: '32px', backgroundColor: 'var(--bg-color)', borderRadius: '8px' }}><Minus size={18}/></button>
-                          <span style={{ fontWeight: '900', minWidth: '24px', textAlign: 'center', fontSize: '16px' }}>{item.quantity}</span>
-                          <button onClick={() => updateQuantity(item.id, item.quantity + 1)} style={{ width: '32px', height: '32px', backgroundColor: 'var(--bg-color)', borderRadius: '8px' }}><Plus size={18}/></button>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+                            <button onClick={() => updateQuantity(item.id, item.quantity - 1)} style={{ width: '32px', height: '32px', backgroundColor: 'var(--bg-color)', borderRadius: '8px' }}><Minus size={18}/></button>
+                            <span style={{ fontWeight: '900', minWidth: '24px', textAlign: 'center', fontSize: '16px' }}>{item.quantity}</span>
+                            <button onClick={() => updateQuantity(item.id, item.quantity + 1)} style={{ width: '32px', height: '32px', backgroundColor: 'var(--bg-color)', borderRadius: '8px' }}><Plus size={18}/></button>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -611,9 +568,61 @@ export const SellerDashboard: React.FC = () => {
 
                     <button 
                       onClick={handleCheckout}
-                      style={{ width: '100%', backgroundColor: 'var(--button-color)', color: 'white', padding: '18px', borderRadius: '18px', fontWeight: '900', fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', boxShadow: '0 8px 24px rgba(51, 144, 236, 0.25)' }}
+                      style={{ width: '100%', backgroundColor: 'var(--button-color)', color: 'white', padding: '18px', borderRadius: '18px', fontWeight: '900', fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', boxShadow: '0 6px 18px rgba(51, 144, 236, 0.2)' }}
                     >
                       <Check size={24} /> Confirm Sale • €{cartTotal.toFixed(2)}
+                    </button>
+                  </div>
+                </motion.div>
+              </>
+            )}
+
+            {priceEditorItem && (
+              <>
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={fadeTransition} onClick={closePriceEditor} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2100, willChange: 'opacity' }}/>
+                <motion.div
+                  initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+                  transition={sheetTransition}
+                  style={{ position: 'fixed', bottom: 0, left: 0, right: 0, backgroundColor: 'var(--bg-color)', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', padding: '24px', zIndex: 2101, ...sheetSurfaceStyle }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+                    <div>
+                      <h3 style={{ margin: 0 }}>Edit Price</h3>
+                      <div style={{ fontSize: '12px', color: 'var(--hint-color)', marginTop: '4px' }}>{priceEditorItem.name}</div>
+                    </div>
+                    <button onClick={closePriceEditor} style={{ background: 'var(--secondary-bg-color)', borderRadius: '50%', padding: '6px' }}><X size={20} /></button>
+                  </div>
+
+                  <div style={{ backgroundColor: 'var(--secondary-bg-color)', borderRadius: '18px', padding: '18px', marginBottom: '16px' }}>
+                    <div style={{ fontSize: '12px', color: 'var(--hint-color)', marginBottom: '6px' }}>Sale Price</div>
+                    <div style={{ fontSize: '34px', fontWeight: '900', letterSpacing: '-0.02em' }}>
+                      €{priceEditorValue || '0'}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '16px' }}>
+                    {['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '00'].map((key) => (
+                      <button
+                        key={key}
+                        onClick={() => handlePriceKeypad(key)}
+                        style={{ height: '56px', borderRadius: '16px', backgroundColor: 'var(--secondary-bg-color)', fontSize: '22px', fontWeight: '800', color: 'var(--text-color)' }}
+                      >
+                        {key}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
+                    <button onClick={() => handlePriceKeypad('backspace')} style={{ height: '48px', borderRadius: '14px', backgroundColor: 'var(--secondary-bg-color)', fontWeight: '700' }}>Delete</button>
+                    <button onClick={() => handlePriceKeypad('clear')} style={{ height: '48px', borderRadius: '14px', backgroundColor: 'var(--secondary-bg-color)', fontWeight: '700' }}>Clear</button>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <button onClick={resetPriceEditor} style={{ height: '50px', borderRadius: '14px', backgroundColor: 'var(--secondary-bg-color)', fontWeight: '800', color: 'var(--text-color)' }}>
+                      Reset
+                    </button>
+                    <button onClick={applyPriceEditor} style={{ height: '50px', borderRadius: '14px', backgroundColor: 'var(--button-color)', color: 'white', fontWeight: '800' }}>
+                      Apply
                     </button>
                   </div>
                 </motion.div>
@@ -639,6 +648,176 @@ const ThemeButton: React.FC<{ active: boolean; onClick: () => void; icon: React.
     {icon} {label}
   </button>
 );
+
+const ShiftManagementPanel: React.FC<{
+  isShiftActive: boolean;
+  shiftStartedAt: string | null;
+  isOnBreak: boolean;
+  breakEntries: { id: string; start: string; end: string | null }[];
+  todayOrders: Order[];
+  todaySalesTotal: number;
+  todayItemsCount: number;
+  averageTicket: number;
+  onToggleShift: () => void;
+  onToggleBreak: () => void;
+  onGoToCheckout: () => void;
+  onGoToHistory: () => void;
+}> = ({
+  isShiftActive,
+  shiftStartedAt,
+  isOnBreak,
+  breakEntries,
+  todayOrders,
+  todaySalesTotal,
+  todayItemsCount,
+  averageTicket,
+  onToggleShift,
+  onToggleBreak,
+  onGoToCheckout,
+  onGoToHistory,
+}) => {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const totalBreakSeconds = breakEntries.reduce((sum, entry) => {
+    const endTime = entry.end ? new Date(entry.end).getTime() : now;
+    return sum + Math.max(0, Math.floor((endTime - new Date(entry.start).getTime()) / 1000));
+  }, 0);
+  const shiftDurationSeconds = shiftStartedAt ? Math.max(0, Math.floor((now - new Date(shiftStartedAt).getTime()) / 1000)) : 0;
+  const activeWorkSeconds = Math.max(0, shiftDurationSeconds - totalBreakSeconds);
+
+  const shiftActivity = [
+    ...(shiftStartedAt
+      ? [{
+          id: 'shift-started',
+          label: 'Shift started',
+          time: formatDisplayDateTime(shiftStartedAt),
+          tone: 'var(--button-color)',
+        }]
+      : []),
+    ...breakEntries.map((entry, index) => ({
+      id: entry.id,
+      label: entry.end ? `Break ${index + 1} completed` : `Break ${index + 1} in progress`,
+      time: entry.end
+        ? `${formatTimeOnly(entry.start)} - ${formatTimeOnly(entry.end)}`
+        : `Started at ${formatTimeOnly(entry.start)}`,
+      tone: entry.end ? 'var(--hint-color)' : 'var(--danger-color)',
+    })),
+    ...(todayOrders[0]
+      ? [{
+          id: 'last-sale',
+          label: 'Latest sale today',
+          time: `${formatDisplayDate(todayOrders[0].date)} • ${todayOrders[0].time}`,
+          tone: 'var(--success-color)',
+        }]
+      : []),
+  ];
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+      <h3 style={{ fontSize: '24px' }}>Shift Management</h3>
+
+      <div className="card" style={{ padding: '20px', marginTop: '16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '18px' }}>
+          <div>
+            <div style={{ fontSize: '12px', color: 'var(--hint-color)', textTransform: 'uppercase', marginBottom: '6px' }}>Current Shift</div>
+            <div style={{ fontSize: '28px', fontWeight: '900', lineHeight: 1.1, color: 'var(--text-color)' }}>
+              {formatDuration(activeWorkSeconds)}
+            </div>
+          </div>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '7px 10px', borderRadius: '999px', backgroundColor: 'var(--bg-color)' }}>
+            <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: isShiftActive ? (isOnBreak ? 'var(--danger-color)' : 'var(--success-color)') : 'var(--hint-color)' }} />
+            <span style={{ fontSize: '12px', fontWeight: '700', color: isShiftActive ? (isOnBreak ? 'var(--danger-color)' : 'var(--success-color)') : 'var(--hint-color)' }}>
+              {isShiftActive ? (isOnBreak ? 'On Break' : 'Shift Active') : 'Shift Closed'}
+            </span>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '18px' }}>
+          <div style={{ backgroundColor: 'var(--bg-color)', borderRadius: '12px', padding: '12px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--hint-color)', marginBottom: '4px' }}>Started At</div>
+            <div style={{ fontSize: '14px', fontWeight: '700' }}>{shiftStartedAt ? formatDisplayDateTime(shiftStartedAt) : 'Not started'}</div>
+          </div>
+          <div style={{ backgroundColor: 'var(--bg-color)', borderRadius: '12px', padding: '12px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--hint-color)', marginBottom: '4px' }}>Break Time</div>
+            <div style={{ fontSize: '14px', fontWeight: '700' }}>{formatDuration(totalBreakSeconds)}</div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button onClick={onToggleShift} style={{ flex: 1, padding: '16px', borderRadius: '16px', backgroundColor: isShiftActive ? 'var(--danger-color)' : 'var(--success-color)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', fontWeight: 'bold', fontSize: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }}>
+            {isShiftActive ? <><Square size={22} fill="white"/> End Shift</> : <><Play size={22} fill="white"/> Start Shift</>}
+          </button>
+          <button
+            onClick={onToggleBreak}
+            disabled={!isShiftActive}
+            style={{ width: '112px', padding: '16px 10px', borderRadius: '16px', backgroundColor: !isShiftActive ? 'var(--bg-color)' : isOnBreak ? 'rgba(82, 196, 26, 0.12)' : 'rgba(255, 77, 79, 0.12)', color: !isShiftActive ? 'var(--hint-color)' : isOnBreak ? 'var(--success-color)' : 'var(--danger-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 'bold', fontSize: '14px', opacity: !isShiftActive ? 0.7 : 1 }}
+          >
+            {isOnBreak ? <><PlayCircle size={18} /> Resume</> : <><Pause size={18} /> Pause</>}
+          </button>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' }}>
+        <div className="card"><div style={{ color: 'var(--hint-color)', fontSize: '11px', marginBottom: '4px' }}>Today Sales</div><div style={{ fontSize: '20px', fontWeight: 'bold' }}>€{todaySalesTotal.toFixed(2)}</div></div>
+        <div className="card"><div style={{ color: 'var(--hint-color)', fontSize: '11px', marginBottom: '4px' }}>Orders</div><div style={{ fontSize: '20px', fontWeight: 'bold' }}>{todayOrders.length}</div></div>
+        <div className="card"><div style={{ color: 'var(--hint-color)', fontSize: '11px', marginBottom: '4px' }}>Avg Ticket</div><div style={{ fontSize: '20px', fontWeight: 'bold' }}>€{averageTicket.toFixed(2)}</div></div>
+        <div className="card"><div style={{ color: 'var(--hint-color)', fontSize: '11px', marginBottom: '4px' }}>Items Sold</div><div style={{ fontSize: '20px', fontWeight: 'bold' }}>{todayItemsCount}</div></div>
+      </div>
+
+      <div style={{ marginTop: '20px' }}>
+        <h4 style={{ marginBottom: '12px' }}>Quick Actions</h4>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <button onClick={onGoToCheckout} className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '16px', fontWeight: 'bold', color: 'var(--button-color)' }}>
+            <ShoppingCart size={18} /> Go to Checkout
+          </button>
+          <button onClick={onGoToHistory} className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '16px', fontWeight: 'bold', color: 'var(--button-color)' }}>
+            <Receipt size={18} /> View Orders
+          </button>
+        </div>
+      </div>
+
+      <div style={{ marginTop: '20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+          <Activity size={18} color="var(--button-color)" />
+          <h4 style={{ margin: 0 }}>Shift Activity</h4>
+        </div>
+        <div className="card" style={{ padding: '0' }}>
+          {shiftActivity.length > 0 ? (
+            shiftActivity.map((entry, idx) => (
+              <div key={entry.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderBottom: idx !== shiftActivity.length - 1 ? '1px solid var(--bg-color)' : 'none' }}>
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: '600' }}>{entry.label}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--hint-color)', marginTop: '2px' }}>{entry.time}</div>
+                </div>
+                <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: entry.tone, flexShrink: 0 }} />
+              </div>
+            ))
+          ) : (
+            <div style={{ padding: '16px', color: 'var(--hint-color)', fontSize: '13px' }}>
+              Start your shift to begin tracking activity and breaks.
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ marginTop: '20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+          <Coffee size={18} color="var(--button-color)" />
+          <h4 style={{ margin: 0 }}>Weekly Overview</h4>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div className="card"><div style={{ color: 'var(--hint-color)', fontSize: '11px', marginBottom: '4px' }}>Weekly Hours</div><div style={{ fontSize: '20px', fontWeight: 'bold' }}>38.5h</div></div>
+          <div className="card"><div style={{ color: 'var(--hint-color)', fontSize: '11px', marginBottom: '4px' }}>Breaks Today</div><div style={{ fontSize: '20px', fontWeight: 'bold' }}>{breakEntries.length}</div></div>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
 
 const TabItem: React.FC<{ active: boolean; icon: React.ReactNode; label: string; onClick: () => void }> = ({ active, icon, label, onClick }) => (
   <button onClick={onClick} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'none', color: active ? 'var(--button-color)' : 'var(--hint-color)', flex: 1, padding: '4px 0' }}>

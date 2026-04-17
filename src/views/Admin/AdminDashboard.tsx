@@ -75,6 +75,15 @@ const mockSalesFeed: SaleRecord[] = [
 const formatDisplayDate = (date: string) =>
   new Date(`${date}T00:00:00`).toLocaleDateString('en-GB');
 
+const fadeTransition = { duration: 0.18, ease: 'easeOut' as const };
+const sheetTransition = { duration: 0.24, ease: [0.22, 1, 0.36, 1] as const };
+const sheetSurfaceStyle = {
+  willChange: 'transform',
+  transform: 'translateZ(0)',
+  backfaceVisibility: 'hidden' as const,
+  boxShadow: '0 -6px 24px rgba(0,0,0,0.14)',
+};
+
 const mockStaffActivityFeed: StaffActivityRecord[] = [
   { id: 'a1', sellerId: 's1', type: 'shift_start', title: 'Shift started', date: '2026-04-17', time: '08:58', meta: 'Old Town Cannabis Shop' },
   { id: 'a2', sellerId: 's1', type: 'sale', title: 'Sale completed', date: '2026-04-17', time: '09:14', meta: '€24.50 • 1x Herbal Oil 10ml' },
@@ -147,6 +156,7 @@ export const AdminDashboard: React.FC = () => {
   const [timeRange, setTimeRange] = useState<TimeRange>('week');
   const [storeTimeRange, setStoreTimeRange] = useState<TimeRange>('week');
   const [isNetworkSalesOpen, setIsNetworkSalesOpen] = useState(false);
+  const [isLowStockOpen, setIsLowStockOpen] = useState(false);
   const [isStoreSalesOpen, setIsStoreSalesOpen] = useState(false);
   const [salesFeedFilter, setSalesFeedFilter] = useState<SalesFeedFilter>('today');
   const [selectedSalesFromDate, setSelectedSalesFromDate] = useState('2026-04-14');
@@ -175,6 +185,20 @@ export const AdminDashboard: React.FC = () => {
   const lowStockCount = useMemo(() => {
     return products.filter(p => Object.values(p.stock).some(s => s < 10)).length;
   }, [products]);
+
+  const lowStockItems = useMemo(() => (
+    products.flatMap((product) =>
+      stores
+        .filter((store) => (product.stock[store.id] || 0) < 10)
+        .map((store) => ({
+          id: `${product.id}-${store.id}`,
+          productName: product.name,
+          storeName: store.name,
+          stock: product.stock[store.id] || 0,
+          barcode: product.barcode,
+        }))
+    )
+  ), [products, stores]);
 
   const filteredNetworkSales = useMemo(() => {
     if (salesFeedFilter === 'today') {
@@ -249,6 +273,42 @@ export const AdminDashboard: React.FC = () => {
   const renderContent = () => {
     switch (activeTab) {
       case 'stats':
+        if (isLowStockOpen) {
+          return (
+            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} key="low-stock-detail">
+              <button onClick={() => setIsLowStockOpen(false)} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--button-color)', background: 'none', marginBottom: '16px', padding: 0 }}>
+                <ArrowLeft size={18} /> Back
+              </button>
+
+              <div style={{ marginBottom: '20px' }}>
+                <h3 style={{ fontSize: '24px', marginBottom: '4px' }}>Low Stock</h3>
+                <p style={{ color: 'var(--hint-color)', fontSize: '13px' }}>Products that need restocking across all stores</p>
+              </div>
+
+              <div className="card" style={{ padding: '0' }}>
+                {lowStockItems.length > 0 ? (
+                  lowStockItems.map((item, idx) => (
+                    <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '14px 16px', borderBottom: idx !== lowStockItems.length - 1 ? '1px solid var(--bg-color)' : 'none' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: '600', fontSize: '14px' }}>{item.productName}</div>
+                        <div style={{ fontSize: '12px', color: 'var(--hint-color)', marginTop: '2px' }}>{item.storeName} • {item.barcode}</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '16px', fontWeight: '900', color: 'var(--danger-color)' }}>{item.stock}</div>
+                        <div style={{ fontSize: '10px', color: 'var(--hint-color)', marginTop: '2px', textTransform: 'uppercase' }}>units left</div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ padding: '16px', color: 'var(--hint-color)', fontSize: '13px' }}>
+                    All products are sufficiently stocked.
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          );
+        }
+
         if (isNetworkSalesOpen) {
           return (
             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} key="network-sales-detail">
@@ -368,7 +428,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '12px' }}>
               <div className="card" style={{ padding: '12px' }}><div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--hint-color)', fontSize: '11px', marginBottom: '4px' }}><TrendingUp size={14} /> Total Revenue</div><div style={{ fontSize: '18px', fontWeight: 'bold' }}>€{totalRevenue.toLocaleString()}</div></div>
-              <div className="card" style={{ padding: '12px', border: lowStockCount > 0 ? '1px solid #ff4d4f33' : 'none' }}><div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: lowStockCount > 0 ? 'var(--danger-color)' : 'var(--hint-color)', fontSize: '11px', marginBottom: '4px' }}><AlertCircle size={14} /> Low Stock</div><div style={{ fontSize: '18px', fontWeight: 'bold', color: lowStockCount > 0 ? 'var(--danger-color)' : 'inherit' }}>{lowStockCount} Items</div></div>
+              <button onClick={() => setIsLowStockOpen(true)} className="card" style={{ padding: '12px', border: lowStockCount > 0 ? '1px solid #ff4d4f33' : 'none', textAlign: 'left' }}><div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: lowStockCount > 0 ? 'var(--danger-color)' : 'var(--hint-color)', fontSize: '11px', marginBottom: '4px' }}><AlertCircle size={14} /> Low Stock</div><div style={{ fontSize: '18px', fontWeight: 'bold', color: lowStockCount > 0 ? 'var(--danger-color)' : 'inherit' }}>{lowStockCount} Items</div></button>
             </div>
 
             {/* Global Recent Sales Feed */}
@@ -782,11 +842,11 @@ export const AdminDashboard: React.FC = () => {
     <div className="container" style={{ paddingBottom: '100px', paddingTop: '10px' }}>
       <div style={{ minHeight: 'calc(100vh - 120px)' }}>{renderContent()}</div>
       <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, backgroundColor: 'var(--bg-color)', borderTop: '1px solid var(--secondary-bg-color)', display: 'flex', justifyContent: 'space-around', padding: '8px 4px 24px 4px', zIndex: 1000, boxShadow: '0 -2px 10px rgba(0,0,0,0.05)' }}>
-        <TabItem active={activeTab === 'stats'} icon={<BarChart3 size={24} />} label="Stats" onClick={() => { setActiveTab('stats'); setDetailStore(null); setDetailStaff(null); setIsNetworkSalesOpen(false); setIsStoreSalesOpen(false); }} />
-        <TabItem active={activeTab === 'inventory'} icon={<Package size={24} />} label="Stock" onClick={() => { setActiveTab('inventory'); setDetailStore(null); setDetailStaff(null); setIsNetworkSalesOpen(false); setIsStoreSalesOpen(false); }} />
-        <TabItem active={activeTab === 'stores'} icon={<Store size={24} />} label="Stores" onClick={() => { setActiveTab('stores'); setDetailStaff(null); setIsNetworkSalesOpen(false); setIsStoreSalesOpen(false); }} />
-        <TabItem active={activeTab === 'users'} icon={<Users size={24} />} label="Staff" onClick={() => { setActiveTab('users'); setDetailStore(null); setDetailStaff(null); setIsNetworkSalesOpen(false); setIsStoreSalesOpen(false); }} />
-        <TabItem active={activeTab === 'settings'} icon={<Settings size={24} />} label="Options" onClick={() => { setActiveTab('settings'); setDetailStore(null); setDetailStaff(null); setIsNetworkSalesOpen(false); setIsStoreSalesOpen(false); }} />
+        <TabItem active={activeTab === 'stats'} icon={<BarChart3 size={24} />} label="Stats" onClick={() => { setActiveTab('stats'); setDetailStore(null); setDetailStaff(null); setIsNetworkSalesOpen(false); setIsLowStockOpen(false); setIsStoreSalesOpen(false); }} />
+        <TabItem active={activeTab === 'inventory'} icon={<Package size={24} />} label="Stock" onClick={() => { setActiveTab('inventory'); setDetailStore(null); setDetailStaff(null); setIsNetworkSalesOpen(false); setIsLowStockOpen(false); setIsStoreSalesOpen(false); }} />
+        <TabItem active={activeTab === 'stores'} icon={<Store size={24} />} label="Stores" onClick={() => { setActiveTab('stores'); setDetailStaff(null); setIsNetworkSalesOpen(false); setIsLowStockOpen(false); setIsStoreSalesOpen(false); }} />
+        <TabItem active={activeTab === 'users'} icon={<Users size={24} />} label="Staff" onClick={() => { setActiveTab('users'); setDetailStore(null); setDetailStaff(null); setIsNetworkSalesOpen(false); setIsLowStockOpen(false); setIsStoreSalesOpen(false); }} />
+        <TabItem active={activeTab === 'settings'} icon={<Settings size={24} />} label="Options" onClick={() => { setActiveTab('settings'); setDetailStore(null); setDetailStaff(null); setIsNetworkSalesOpen(false); setIsLowStockOpen(false); setIsStoreSalesOpen(false); }} />
       </div>
     </div>
   );
@@ -813,8 +873,8 @@ const ProductEditor: React.FC<{ isOpen: boolean; onClose: () => void; onSave: ()
   <AnimatePresence>
     {isOpen && (
       <>
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000 }}/>
-        <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 300 }} style={{ position: 'fixed', bottom: 0, left: 0, right: 0, backgroundColor: 'var(--bg-color)', borderTopLeftRadius: '20px', borderTopRightRadius: '20px', padding: '24px', zIndex: 2001, boxShadow: '0 -10px 40px rgba(0,0,0,0.2)' }}>
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={fadeTransition} onClick={onClose} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000, willChange: 'opacity' }}/>
+        <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={sheetTransition} style={{ position: 'fixed', bottom: 0, left: 0, right: 0, backgroundColor: 'var(--bg-color)', borderTopLeftRadius: '20px', borderTopRightRadius: '20px', padding: '24px', zIndex: 2001, ...sheetSurfaceStyle }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}><h3>{isEdit ? 'Edit Product' : 'Add New Product'}</h3><button onClick={onClose} style={{ background: 'var(--secondary-bg-color)', borderRadius: '50%', padding: '4px' }}><X size={20}/></button></div>
           <div style={{ display: 'grid', gap: '16px' }}>
             <div><label style={{ fontSize: '12px', color: 'var(--hint-color)', marginLeft: '4px' }}>Product Name</label><input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="e.g. Herbal Oil 10ml" /></div>
@@ -834,8 +894,8 @@ const StaffEditor: React.FC<{ isOpen: boolean; onClose: () => void; onSave: () =
   <AnimatePresence>
     {isOpen && (
       <>
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000 }}/>
-        <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 300 }} style={{ position: 'fixed', bottom: 0, left: 0, right: 0, backgroundColor: 'var(--bg-color)', borderTopLeftRadius: '20px', borderTopRightRadius: '20px', padding: '24px', zIndex: 2001, boxShadow: '0 -10px 40px rgba(0,0,0,0.2)' }}>
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={fadeTransition} onClick={onClose} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000, willChange: 'opacity' }}/>
+        <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={sheetTransition} style={{ position: 'fixed', bottom: 0, left: 0, right: 0, backgroundColor: 'var(--bg-color)', borderTopLeftRadius: '20px', borderTopRightRadius: '20px', padding: '24px', zIndex: 2001, ...sheetSurfaceStyle }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}><h3>{isEdit ? 'Edit Staff' : 'Add New Staff'}</h3><button onClick={onClose} style={{ background: 'var(--secondary-bg-color)', borderRadius: '50%', padding: '4px' }}><X size={20}/></button></div>
           <div style={{ display: 'grid', gap: '16px' }}>
             <div><label style={{ fontSize: '12px', color: 'var(--hint-color)', marginLeft: '4px' }}>Full Name</label><input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="e.g. John Doe" /></div>
@@ -857,8 +917,8 @@ const StoreEditor: React.FC<{ isOpen: boolean; onClose: () => void; onSave: () =
   <AnimatePresence>
     {isOpen && (
       <>
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000 }}/>
-        <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 300 }} style={{ position: 'fixed', bottom: 0, left: 0, right: 0, backgroundColor: 'var(--bg-color)', borderTopLeftRadius: '20px', borderTopRightRadius: '20px', padding: '24px', zIndex: 2001, boxShadow: '0 -10px 40px rgba(0,0,0,0.2)' }}>
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={fadeTransition} onClick={onClose} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000, willChange: 'opacity' }}/>
+        <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={sheetTransition} style={{ position: 'fixed', bottom: 0, left: 0, right: 0, backgroundColor: 'var(--bg-color)', borderTopLeftRadius: '20px', borderTopRightRadius: '20px', padding: '24px', zIndex: 2001, ...sheetSurfaceStyle }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}><h3>Add New Store</h3><button onClick={onClose} style={{ background: 'var(--secondary-bg-color)', borderRadius: '50%', padding: '4px' }}><X size={20}/></button></div>
           <div style={{ display: 'grid', gap: '16px' }}>
             <div><label style={{ fontSize: '12px', color: 'var(--hint-color)', marginLeft: '4px' }}>Store Name</label><input value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="e.g. Riverside Plaza" /></div>
