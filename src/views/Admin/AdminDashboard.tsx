@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useInventoryStore, type Store as StoreType, type Product } from '../../store/useInventoryStore';
 import { useStaffStore, type StaffMember } from '../../store/useStaffStore';
-import { useSettingsStore, type ThemeMode } from '../../store/useSettingsStore';
+import { useSettingsStore } from '../../store/useSettingsStore';
 import { 
   LogOut, 
   BarChart3, 
@@ -25,7 +25,9 @@ import {
   UserPlus,
   Sun,
   Moon,
-  Monitor
+  Monitor,
+  Receipt,
+  ShoppingCart
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
@@ -33,6 +35,24 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 
 type TimeRange = 'day' | 'week' | 'month' | 'all';
+
+interface SaleRecord {
+  id: string;
+  storeId: string;
+  storeName: string;
+  time: string;
+  total: number;
+  items: string;
+}
+
+// Global Mock Sales Feed
+const mockSalesFeed: SaleRecord[] = [
+  { id: '101', storeId: '1', storeName: 'Central Mall', time: '14:25', total: 12.50, items: '2x Americano, 1x Croissant' },
+  { id: '102', storeId: '2', storeName: 'City Station', time: '14:10', total: 5.90, items: '1x Tuna Sandwich' },
+  { id: '103', storeId: '1', storeName: 'Central Mall', time: '13:45', total: 22.00, items: '4x Juice, 2x Bakery' },
+  { id: '104', storeId: '2', storeName: 'City Station', time: '13:15', total: 8.40, items: '1x Coffee, 2x Croissant' },
+  { id: '105', storeId: '1', storeName: 'Central Mall', time: '12:50', total: 15.30, items: '3x Americano' },
+];
 
 // Mock data factories
 const getSalesData = (range: TimeRange, storeId: string = 'all') => {
@@ -89,12 +109,11 @@ export const AdminDashboard: React.FC = () => {
   const [timeRange, setTimeRange] = useState<TimeRange>('week');
   const [storeTimeRange, setStoreTimeRange] = useState<TimeRange>('week');
   
-  // Inventory UI State
+  // UI State
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState({ name: '', price: '', barcode: '' });
   
-  // Staff UI State
   const [isStaffEditorOpen, setIsStaffEditorOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
   const [staffFormData, setStaffFormData] = useState({ name: '', storeId: '' });
@@ -104,6 +123,9 @@ export const AdminDashboard: React.FC = () => {
   const topProductsData = useMemo(() => getTopProducts(timeRange), [timeRange]);
   const totalRevenue = useMemo(() => salesData.reduce((acc, d) => acc + d.revenue, 0), [salesData]);
 
+  // Per-store calculations
+  const storeSalesData = useMemo(() => detailStore ? getSalesData(storeTimeRange, detailStore.id) : [], [detailStore, storeTimeRange]);
+  
   const lowStockCount = useMemo(() => {
     return products.filter(p => Object.values(p.stock).some(s => s < 10)).length;
   }, [products]);
@@ -157,7 +179,56 @@ export const AdminDashboard: React.FC = () => {
               <div className="card" style={{ padding: '12px' }}><div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--hint-color)', fontSize: '11px', marginBottom: '4px' }}><TrendingUp size={14} /> Total Revenue</div><div style={{ fontSize: '18px', fontWeight: 'bold' }}>€{totalRevenue.toLocaleString()}</div></div>
               <div className="card" style={{ padding: '12px', border: lowStockCount > 0 ? '1px solid #ff4d4f33' : 'none' }}><div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: lowStockCount > 0 ? 'var(--danger-color)' : 'var(--hint-color)', fontSize: '11px', marginBottom: '4px' }}><AlertCircle size={14} /> Low Stock</div><div style={{ fontSize: '18px', fontWeight: 'bold', color: lowStockCount > 0 ? 'var(--danger-color)' : 'inherit' }}>{lowStockCount} Items</div></div>
             </div>
-            <div style={{ marginTop: '20px' }}><div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}><Award size={18} color="var(--button-color)" /><h4 style={{ margin: 0 }}>Top Selling Products</h4></div><div className="card" style={{ padding: '0' }}>{topProductsData.map((p, idx) => (<div key={p.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: idx !== topProductsData.length - 1 ? '1px solid var(--bg-color)' : 'none' }}><div><div style={{ fontSize: '14px', fontWeight: '600' }}>{p.name}</div><div style={{ fontSize: '11px', color: 'var(--hint-color)' }}>{p.sales.toLocaleString()} sold</div></div><div style={{ fontSize: '14px', fontWeight: 'bold' }}>€{p.revenue.toLocaleString()}</div></div>))}</div></div>
+
+            {/* Global Recent Sales Feed */}
+            <div style={{ marginTop: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                <Receipt size={18} color="var(--button-color)" />
+                <h4 style={{ margin: 0 }}>Network Sales Feed</h4>
+              </div>
+              <div className="card" style={{ padding: '0' }}>
+                {mockSalesFeed.map((sale, idx) => (
+                  <div key={sale.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderBottom: idx !== mockSalesFeed.length - 1 ? '1px solid var(--bg-color)' : 'none' }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '14px', fontWeight: 'bold' }}>€{sale.total.toFixed(2)}</span>
+                        <span style={{ fontSize: '10px', color: 'var(--button-color)', backgroundColor: 'var(--secondary-bg-color)', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>{sale.storeName}</span>
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--hint-color)', marginTop: '2px' }}>{sale.items}</div>
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--hint-color)', fontWeight: '500' }}>{sale.time}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            <div style={{ marginTop: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                <Award size={18} color="var(--button-color)" />
+                <h4 style={{ margin: 0 }}>Top Selling Products</h4>
+              </div>
+              <div className="card" style={{ padding: '0' }}>
+                {topProductsData.map((p, idx) => (
+                  <div key={p.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: idx !== topProductsData.length - 1 ? '1px solid var(--bg-color)' : 'none' }}>
+                    <div>
+                      <div style={{ fontSize: '14px', fontWeight: '600' }}>{p.name}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--hint-color)' }}>{p.sales.toLocaleString()} sold</div>
+                    </div>
+                    <div style={{ fontSize: '14px', fontWeight: 'bold' }}>€{p.revenue.toLocaleString()}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ marginTop: '24px' }}>
+              <h4 style={{ marginBottom: '12px' }}>Store Performance</h4>
+              {stores.map((s, idx) => (
+                <div key={s.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><Store size={16} color="var(--button-color)" /><span style={{ fontSize: '14px' }}>{s.name}</span></div>
+                  <div style={{ textAlign: 'right' }}><div style={{ fontSize: '14px', fontWeight: 'bold' }}>€{(totalRevenue * (idx === 0 ? 0.6 : 0.4)).toFixed(0)}</div><div style={{ fontSize: '10px', color: 'var(--success-color)' }}>+12% {timeLabels[timeRange]}</div></div>
+                </div>
+              ))}
+            </div>
           </motion.div>
         );
 
@@ -186,13 +257,16 @@ export const AdminDashboard: React.FC = () => {
               <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} key="store-detail">
                 <button onClick={() => setDetailStore(null)} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--button-color)', background: 'none', marginBottom: '16px', padding: 0 }}><ArrowLeft size={18} /> Back</button>
                 <div style={{ marginBottom: '20px' }}><h2>{detailStore.name}</h2><p style={{ color: 'var(--hint-color)' }}>{detailStore.address}</p></div>
+                
                 <div style={{ display: 'flex', backgroundColor: 'var(--secondary-bg-color)', padding: '4px', borderRadius: '14px', marginBottom: '24px' }}>
                   <button onClick={() => setStoreDetailTab('performance')} style={{ flex: 1, padding: '10px', borderRadius: '10px', fontSize: '14px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: storeDetailTab === 'performance' ? 'var(--bg-color)' : 'transparent', color: storeDetailTab === 'performance' ? 'var(--button-color)' : 'var(--hint-color)', transition: '0.2s' }}><BarChart3 size={18}/> Performance</button>
                   <button onClick={() => setStoreDetailTab('stock')} style={{ flex: 1, padding: '10px', borderRadius: '10px', fontSize: '14px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: storeDetailTab === 'stock' ? 'var(--bg-color)' : 'transparent', color: storeDetailTab === 'stock' ? 'var(--button-color)' : 'var(--hint-color)', transition: '0.2s' }}><Package size={18}/> Stock</button>
                 </div>
+
                 {storeDetailTab === 'performance' ? (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ paddingBottom: '40px' }}>
                     <TimeRangeSelector value={storeTimeRange} onChange={setStoreTimeRange} />
+                    
                     <div className="card" style={{ height: '220px', padding: '16px 8px 16px 0' }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={storeSalesData}>
@@ -204,19 +278,51 @@ export const AdminDashboard: React.FC = () => {
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' }}>
+                      <div className="card" style={{ padding: '12px' }}>
+                        <div style={{ color: 'var(--hint-color)', fontSize: '11px' }}>Total Revenue</div>
+                        <div style={{ fontSize: '18px', fontWeight: 'bold' }}>€{storeSalesData.reduce((acc, d) => acc + d.revenue, 0).toLocaleString()}</div>
+                      </div>
+                      <div className="card" style={{ padding: '12px' }}>
+                        <div style={{ color: 'var(--hint-color)', fontSize: '11px' }}>Today's Sales</div>
+                        <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{Math.round(Math.random() * 20 + 10)}</div>
+                      </div>
+                    </div>
+
+                    {/* Store Specific Sales Feed */}
+                    <div style={{ marginTop: '24px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                        <ShoppingCart size={18} color="var(--button-color)" />
+                        <h4 style={{ margin: 0 }}>Recent Sales (Today)</h4>
+                      </div>
+                      <div className="card" style={{ padding: '0' }}>
+                        {mockSalesFeed.filter(s => s.storeId === detailStore.id).map((sale, idx, arr) => (
+                          <div key={sale.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderBottom: idx !== arr.length - 1 ? '1px solid var(--bg-color)' : 'none' }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: 'bold', fontSize: '14px' }}>€{sale.total.toFixed(2)}</div>
+                              <div style={{ fontSize: '11px', color: 'var(--hint-color)', marginTop: '2px' }}>{sale.items}</div>
+                            </div>
+                            <div style={{ fontSize: '12px', color: 'var(--hint-color)' }}>{sale.time}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </motion.div>
                 ) : (
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                    {products.map((product) => (
-                      <div key={product.id} className="card" style={{ padding: '16px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}><div><div style={{ fontWeight: 'bold', fontSize: '16px' }}>{product.name}</div><div style={{ fontSize: '12px', color: 'var(--hint-color)' }}>{product.barcode}</div></div><div style={{ color: 'var(--button-color)', fontWeight: 'bold' }}>€{product.price.toFixed(2)}</div></div>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '24px', backgroundColor: 'var(--bg-color)', padding: '12px', borderRadius: '12px' }}>
-                          <button onClick={() => updateStock(product.id, detailStore.id, -1)} style={{ width: '44px', height: '44px', backgroundColor: 'var(--secondary-bg-color)', borderRadius: '12px', fontSize: '24px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>-</button>
-                          <div style={{ textAlign: 'center' }}><div style={{ fontSize: '24px', fontWeight: '900', minWidth: '50px' }}>{product.stock[detailStore.id] || 0}</div><div style={{ fontSize: '10px', color: 'var(--hint-color)', textTransform: 'uppercase' }}>units</div></div>
-                          <button onClick={() => updateStock(product.id, detailStore.id, 1)} style={{ width: '44px', height: '44px', backgroundColor: 'var(--secondary-bg-color)', borderRadius: '12px', fontSize: '24px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+                    <div style={{ display: 'grid', gap: '12px', marginBottom: '80px' }}>
+                      {products.map((product) => (
+                        <div key={product.id} className="card" style={{ padding: '16px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}><div><div style={{ fontWeight: 'bold', fontSize: '16px' }}>{product.name}</div><div style={{ fontSize: '12px', color: 'var(--hint-color)' }}>{product.barcode}</div></div><div style={{ color: 'var(--button-color)', fontWeight: 'bold' }}>€{product.price.toFixed(2)}</div></div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '24px', backgroundColor: 'var(--bg-color)', padding: '12px', borderRadius: '12px' }}>
+                            <button onClick={() => updateStock(product.id, detailStore.id, -1)} style={{ width: '44px', height: '44px', backgroundColor: 'var(--secondary-bg-color)', borderRadius: '12px', fontSize: '24px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>-</button>
+                            <div style={{ textAlign: 'center' }}><div style={{ fontSize: '24px', fontWeight: '900', minWidth: '50px' }}>{product.stock[detailStore.id] || 0}</div><div style={{ fontSize: '10px', color: 'var(--hint-color)', textTransform: 'uppercase' }}>units</div></div>
+                            <button onClick={() => updateStock(product.id, detailStore.id, 1)} style={{ width: '44px', height: '44px', backgroundColor: 'var(--secondary-bg-color)', borderRadius: '12px', fontSize: '24px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                     <div style={{ position: 'fixed', bottom: '90px', left: '16px', right: '16px', zIndex: 100 }}><button onClick={() => alert('Saved!')} style={{ width: '100%', backgroundColor: 'var(--button-color)', color: 'white', padding: '16px', borderRadius: '16px', fontWeight: 'bold', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}><Save size={20}/> Save Inventory</button></div>
                   </motion.div>
                 )}
@@ -262,7 +368,7 @@ export const AdminDashboard: React.FC = () => {
               <div style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '16px' }}><span style={{ flex: 1 }}>Security</span><ChevronRight size={18} color="var(--hint-color)" /></div>
             </div>
             
-            <button onClick={logout} className="card" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '16px', color: 'var(--danger-color)', marginTop: '20px' }}><LogOut size={20} /><span style={{ fontWeight: '600' }}>Log Out</span></button>
+            <button onClick={logout} className="card" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--danger-color)', marginTop: '20px' }}><LogOut size={20} /><span style={{ fontWeight: '600' }}>Log Out</span></button>
           </motion.div>
         );
     }
