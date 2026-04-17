@@ -13,7 +13,7 @@ function App() {
   const { role, setAuthenticatedUser } = useAuthStore();
   const { theme } = useSettingsStore();
   const { stores, hasLoadedCatalog, loadCatalog } = useInventoryStore();
-  const { onReady, onExpand, tg } = useTelegram();
+  const { onReady, onExpand, tg, user } = useTelegram();
 
   useEffect(() => {
     onReady();
@@ -67,7 +67,17 @@ function App() {
   }
 
   if (!role) {
-    return <RoleSelector />;
+    return (
+      <RoleSelector
+        diagnostics={{
+          hasTelegramObject: Boolean(tg),
+          hasInitData: Boolean(tg?.initData),
+          initDataLength: tg?.initData?.length ?? 0,
+          telegramUserId: user?.id ? String(user.id) : null,
+          platform: tg?.platform ?? null,
+        }}
+      />
+    );
   }
 
   return role === 'ADMIN' ? <AdminDashboard /> : <SellerDashboard />;

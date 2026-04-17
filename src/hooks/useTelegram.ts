@@ -1,23 +1,31 @@
 import WebApp from '@twa-dev/sdk';
 
+type TelegramWindow = Window & {
+  Telegram?: {
+    WebApp?: typeof WebApp;
+  };
+};
+
 export const useTelegram = () => {
+  const tg = (window as TelegramWindow).Telegram?.WebApp ?? WebApp;
+
   const onToggleButton = () => {
-    if (WebApp?.MainButton?.isVisible) {
-      WebApp.MainButton.hide();
+    if (tg?.MainButton?.isVisible) {
+      tg.MainButton.hide();
     } else {
-      WebApp?.MainButton?.show();
+      tg?.MainButton?.show();
     }
   };
 
   const onExpand = () => {
-    if (WebApp?.expand) {
-      WebApp.expand();
+    if (tg?.expand) {
+      tg.expand();
     }
   };
 
   const onReady = () => {
-    if (WebApp?.ready) {
-      WebApp.ready();
+    if (tg?.ready) {
+      tg.ready();
     }
   };
 
@@ -25,8 +33,8 @@ export const useTelegram = () => {
     onToggleButton,
     onExpand,
     onReady,
-    tg: WebApp,
-    user: WebApp?.initDataUnsafe?.user,
-    queryId: WebApp?.initDataUnsafe?.query_id,
+    tg,
+    user: tg?.initDataUnsafe?.user,
+    queryId: tg?.initDataUnsafe?.query_id,
   };
 };

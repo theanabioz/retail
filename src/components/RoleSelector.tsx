@@ -1,7 +1,17 @@
 import React from 'react';
 import { ShieldCheck, Smartphone } from 'lucide-react';
 
-export const RoleSelector: React.FC = () => {
+interface RoleSelectorProps {
+  diagnostics?: {
+    hasTelegramObject: boolean;
+    hasInitData: boolean;
+    initDataLength: number;
+    telegramUserId: string | null;
+    platform: string | null;
+  };
+}
+
+export const RoleSelector: React.FC<RoleSelectorProps> = ({ diagnostics }) => {
   return (
     <div className="container" style={{ textAlign: 'center', paddingTop: '56px' }}>
       <ShieldCheck size={64} color="var(--button-color)" style={{ marginBottom: '20px' }} />
@@ -18,6 +28,26 @@ export const RoleSelector: React.FC = () => {
         <div style={{ fontSize: '13px', color: 'var(--hint-color)', lineHeight: 1.5 }}>
           This production build accepts only Telegram Mini App authentication. Launch it from your bot to continue.
         </div>
+      </div>
+
+      <div
+        className="card"
+        style={{
+          marginTop: '16px',
+          padding: '16px',
+          textAlign: 'left',
+          fontSize: '12px',
+          color: 'var(--hint-color)',
+          display: 'grid',
+          gap: '6px',
+        }}
+      >
+        <div style={{ fontWeight: '700', color: 'var(--text-color)' }}>Telegram Debug</div>
+        <div>WebApp object: {diagnostics?.hasTelegramObject ? 'yes' : 'no'}</div>
+        <div>initData: {diagnostics?.hasInitData ? 'yes' : 'no'}</div>
+        <div>initData length: {diagnostics?.initDataLength ?? 0}</div>
+        <div>User ID: {diagnostics?.telegramUserId ?? 'none'}</div>
+        <div>Platform: {diagnostics?.platform ?? 'unknown'}</div>
       </div>
     </div>
   );
