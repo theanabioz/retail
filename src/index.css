@@ -11,6 +11,22 @@
   --success-color: #52c41a;
 }
 
+body.light {
+  --bg-color: #ffffff;
+  --secondary-bg-color: #f4f4f7;
+  --text-color: #000000;
+  --hint-color: #707579;
+  --button-color: #3390ec;
+}
+
+body.dark {
+  --bg-color: #1c1c1d;
+  --secondary-bg-color: #2c2c2e;
+  --text-color: #ffffff;
+  --hint-color: #8e8e93;
+  --button-color: #0a84ff;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -24,6 +40,7 @@ body {
   line-height: 1.5;
   -webkit-tap-highlight-color: transparent;
   overflow-x: hidden;
+  transition: background-color 0.3s, color 0.3s;
 }
 
 button {
@@ -31,7 +48,7 @@ button {
   outline: none;
   cursor: pointer;
   font-family: inherit;
-  transition: opacity 0.2s;
+  transition: opacity 0.2s, background-color 0.3s;
 }
 
 button:active {
@@ -49,6 +66,7 @@ button:active {
   border-radius: 12px;
   padding: 16px;
   margin-bottom: 12px;
+  transition: background-color 0.3s;
 }
 
 h1, h2, h3 {
@@ -63,4 +81,5 @@ input, select {
   background: var(--bg-color);
   color: var(--text-color);
   margin-bottom: 12px;
+  transition: background-color 0.3s, color 0.3s;
 }

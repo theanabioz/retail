@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useInventoryStore } from '../../store/useInventoryStore';
 import { useSaleStore } from '../../store/useSaleStore';
+import { useStaffStore } from '../../store/useStaffStore';
 import { useTelegram } from '../../hooks/useTelegram';
+import { useSettingsStore } from '../../store/useSettingsStore';
 import { 
   LogOut, 
   ScanBarcode, 
@@ -19,21 +21,64 @@ import {
   Banknote,
   Search,
   ChevronRight,
-  Clock
+  Clock,
+  ArrowLeft,
+  Receipt,
+  Save,
+  Check,
+  Settings,
+  Sun,
+  Moon,
+  Monitor
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-type SellerTab = 'checkout' | 'history' | 'stock' | 'shift';
+type SellerTab = 'checkout' | 'history' | 'stock' | 'shift' | 'settings';
+
+interface OrderItem {
+  name: string;
+  quantity: number;
+  price: number;
+}
+
+interface Order {
+  id: string;
+  time: string;
+  total: number;
+  paymentMethod: 'card' | 'cash';
+  items: OrderItem[];
+}
+
+const mockOrders: Order[] = [
+  { 
+    id: '1201', time: '12:45', total: 24.50, paymentMethod: 'card', 
+    items: [
+      { name: 'Americano Coffee', quantity: 2, price: 3.50 },
+      { name: 'Butter Croissant', quantity: 1, price: 2.20 },
+      { name: 'Tuna Sandwich', quantity: 1, price: 5.90 }
+    ]
+  },
+  { 
+    id: '1202', time: '13:20', total: 12.80, paymentMethod: 'cash', 
+    items: [
+      { name: 'Fresh Orange Juice', quantity: 1, price: 4.00 },
+      { name: 'Butter Croissant', quantity: 4, price: 2.20 }
+    ]
+  }
+];
 
 export const SellerDashboard: React.FC = () => {
   const { logout, currentStoreId } = useAuthStore();
-  const { products, stores } = useInventoryStore();
+  const { products, stores, updateStock } = useInventoryStore();
   const { cart, addToCart, updateQuantity, clearCart, isShiftActive, toggleShift } = useSaleStore();
   const { tg } = useTelegram();
+  const { theme, setTheme } = useSettingsStore();
   
   const [activeTab, setActiveTab] = useState<SellerTab>('checkout');
   const [search, setSearch] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'cash' | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [isSavingStock, setIsSavingStock] = useState(false);
 
   const currentStore = stores.find(s => s.id === currentStoreId);
   
@@ -63,8 +108,16 @@ export const SellerDashboard: React.FC = () => {
     setPaymentMethod(null);
   };
 
+  const handleSaveInventory = () => {
+    setIsSavingStock(true);
+    if (tg?.HapticFeedback) {
+      tg.HapticFeedback.notificationOccurred('success');
+    }
+    setTimeout(() => setIsSavingStock(false), 2000);
+  };
+
   const renderContent = () => {
-    if (!isShiftActive && activeTab !== 'shift') {
+    if (!isShiftActive && activeTab !== 'shift' && activeTab !== 'settings') {
       return (
         <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--hint-color)' }}>
           <Clock size={64} style={{ marginBottom: '20px', opacity: 0.5 }} />
@@ -79,7 +132,6 @@ export const SellerDashboard: React.FC = () => {
       case 'checkout':
         return (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            {/* Search & Scan */}
             <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
               <div style={{ flex: 1, position: 'relative' }}>
                 <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--hint-color)' }} />
@@ -87,21 +139,14 @@ export const SellerDashboard: React.FC = () => {
               </div>
               <button className="card" style={{ padding: '0 12px', marginBottom: 0, display: 'flex', alignItems: 'center' }}><ScanBarcode size={24} /></button>
             </div>
-
-            {/* Product List */}
             <div style={{ display: 'grid', gap: '10px' }}>
               {filteredProducts.map(product => (
                 <div key={product.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px' }}>
                   <div>
-                    <div style={{ fontWeight: '700', fontSize: '15px', color: '#000000' }}>{product.name}</div>
+                    <div style={{ fontWeight: '700', fontSize: '15px', color: 'var(--text-color)' }}>{product.name}</div>
                     <div style={{ color: 'var(--hint-color)', fontSize: '12px' }}>€{product.price.toFixed(2)} • Stock: {product.stock[currentStoreId!] || 0}</div>
                   </div>
-                  <button 
-                    onClick={() => handleAddToCart(product)}
-                    style={{ backgroundColor: 'var(--button-color)', color: 'white', borderRadius: '12px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                  >
-                    <Plus size={20} />
-                  </button>
+                  <button onClick={() => handleAddToCart(product)} style={{ backgroundColor: 'var(--button-color)', color: 'white', borderRadius: '12px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={20} /></button>
                 </div>
               ))}
             </div>
@@ -110,31 +155,77 @@ export const SellerDashboard: React.FC = () => {
 
       case 'history':
         return (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <h3>Recent Orders</h3>
-            <div style={{ display: 'grid', gap: '10px', marginTop: '16px' }}>
-              {[1, 2, 3].map(i => (
-                <div key={i} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div><div style={{ fontWeight: 'bold' }}>Order #120{i}</div><div style={{ fontSize: '12px', color: 'var(--hint-color)' }}>12:45 • 3 items • Card</div></div>
-                  <div style={{ textAlign: 'right' }}><div style={{ fontWeight: 'bold' }}>€{(24.5 + i).toFixed(2)}</div><ChevronRight size={18} color="var(--hint-color)" /></div>
+          <AnimatePresence mode="wait">
+            {!selectedOrder ? (
+              <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} key="history-list">
+                <h3>Today's Orders</h3>
+                <div style={{ display: 'grid', gap: '10px', marginTop: '16px' }}>
+                  {mockOrders.map(order => (
+                    <div key={order.id} className="card" onClick={() => setSelectedOrder(order)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
+                      <div>
+                        <div style={{ fontWeight: 'bold' }}>Order #{order.id}</div>
+                        <div style={{ fontSize: '12px', color: 'var(--hint-color)' }}>{order.time} • {order.items.length} items • {order.paymentMethod === 'card' ? 'Card' : 'Cash'}</div>
+                      </div>
+                      <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ fontWeight: 'bold' }}>€{order.total.toFixed(2)}</div>
+                        <ChevronRight size={18} color="var(--hint-color)" />
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </motion.div>
+              </motion.div>
+            ) : (
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} key="order-detail">
+                <button onClick={() => setSelectedOrder(null)} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--button-color)', background: 'none', marginBottom: '20px', padding: 0 }}><ArrowLeft size={18} /> Back to History</button>
+                <div className="card" style={{ padding: '24px', backgroundColor: 'var(--bg-color)', border: '1px dashed var(--secondary-bg-color)' }}>
+                  <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+                    <Receipt size={40} color="var(--button-color)" style={{ marginBottom: '12px' }} />
+                    <h2 style={{ marginBottom: '4px' }}>Order #{selectedOrder.id}</h2>
+                    <p style={{ fontSize: '13px', color: 'var(--hint-color)' }}>{selectedOrder.time} • {selectedOrder.paymentMethod.toUpperCase()}</p>
+                  </div>
+                  <div style={{ borderTop: '1px solid var(--secondary-bg-color)', borderBottom: '1px solid var(--secondary-bg-color)', padding: '16px 0', marginBottom: '16px' }}>
+                    {selectedOrder.items.map((item, idx) => (
+                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '14px' }}>
+                        <span>{item.quantity}x {item.name}</span>
+                        <span style={{ fontWeight: '600' }}>€{(item.price * item.quantity).toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: 'bold', fontSize: '18px' }}>Total Amount</span>
+                    <span style={{ fontWeight: '900', fontSize: '22px', color: 'var(--button-color)' }}>€{selectedOrder.total.toFixed(2)}</span>
+                  </div>
+                </div>
+                <button style={{ width: '100%', padding: '16px', borderRadius: '12px', border: '1px solid var(--danger-color)', color: 'var(--danger-color)', backgroundColor: 'transparent', fontWeight: 'bold', marginTop: '20px' }}>Refund Order</button>
+              </motion.div>
+            )}
+          </AnimatePresence>
         );
 
       case 'stock':
         return (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <h3>Store Inventory</h3>
-            <div style={{ display: 'grid', gap: '10px', marginTop: '16px' }}>
+            <h3>My Store Stock</h3>
+            <p style={{ fontSize: '12px', color: 'var(--hint-color)', marginBottom: '16px' }}>Adjust inventory levels for {currentStore?.name}</p>
+            <div style={{ display: 'grid', gap: '12px', paddingBottom: '80px' }}>
               {products.map(p => (
-                <div key={p.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div><div style={{ fontWeight: 'bold' }}>{p.name}</div><div style={{ fontSize: '12px', color: 'var(--hint-color)' }}>{p.barcode}</div></div>
-                  <div style={{ fontWeight: 'bold', color: (p.stock[currentStoreId!] || 0) < 10 ? 'var(--danger-color)' : 'inherit' }}>{p.stock[currentStoreId!] || 0} units</div>
+                <div key={p.id} className="card" style={{ padding: '16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <div>
+                      <div style={{ fontWeight: 'bold', fontSize: '16px' }}>{p.name}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--hint-color)' }}>{p.barcode}</div>
+                    </div>
+                    <div style={{ fontWeight: 'bold', color: 'var(--button-color)' }}>€{p.price.toFixed(2)}</div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '24px', backgroundColor: 'var(--bg-color)', padding: '12px', borderRadius: '12px' }}>
+                    <button onClick={() => { updateStock(p.id, currentStoreId!, -1); tg?.HapticFeedback?.impactOccurred('medium'); }} style={{ width: '44px', height: '44px', backgroundColor: 'var(--secondary-bg-color)', borderRadius: '12px', fontSize: '24px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>-</button>
+                    <div style={{ textAlign: 'center' }}><div style={{ fontSize: '24px', fontWeight: '900', minWidth: '50px', color: (p.stock[currentStoreId!] || 0) < 10 ? 'var(--danger-color)' : 'inherit' }}>{p.stock[currentStoreId!] || 0}</div><div style={{ fontSize: '10px', color: 'var(--hint-color)', textTransform: 'uppercase' }}>units</div></div>
+                    <button onClick={() => { updateStock(p.id, currentStoreId!, 1); tg?.HapticFeedback?.impactOccurred('medium'); }} style={{ width: '44px', height: '44px', backgroundColor: 'var(--secondary-bg-color)', borderRadius: '12px', fontSize: '24px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+                  </div>
                 </div>
               ))}
             </div>
+            <div style={{ position: 'fixed', bottom: '90px', left: '16px', right: '16px', zIndex: 100 }}><button onClick={handleSaveInventory} style={{ width: '100%', backgroundColor: isSavingStock ? 'var(--success-color)' : 'var(--button-color)', color: 'white', padding: '16px', borderRadius: '16px', fontWeight: 'bold', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.15)', transition: '0.3s' }}>{isSavingStock ? <><Check size={20}/> Stock Updated</> : <><Save size={20}/> Save Changes</>}</button></div>
           </motion.div>
         );
 
@@ -151,7 +242,23 @@ export const SellerDashboard: React.FC = () => {
               <div className="card"><div style={{ color: 'var(--hint-color)', fontSize: '11px' }}>Weekly Hours</div><div style={{ fontSize: '20px', fontWeight: 'bold' }}>38.5h</div></div>
               <div className="card"><div style={{ color: 'var(--hint-color)', fontSize: '11px' }}>Today's Sales</div><div style={{ fontSize: '20px', fontWeight: 'bold' }}>€1,240</div></div>
             </div>
-            <button onClick={logout} className="card" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--danger-color)', marginTop: '24px' }}><LogOut size={20} /><span style={{ fontWeight: 'bold' }}>Switch Account / Role</span></button>
+          </motion.div>
+        );
+
+      case 'settings':
+        return (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <h3>Settings</h3>
+            <h4 style={{ color: 'var(--hint-color)', fontSize: '12px', textTransform: 'uppercase', marginBottom: '12px', marginLeft: '4px' }}>Appearance</h4>
+            <div className="card" style={{ padding: '4px', display: 'flex', gap: '4px', backgroundColor: 'var(--secondary-bg-color)' }}>
+              <ThemeButton active={theme === 'light'} onClick={() => setTheme('light')} icon={<Sun size={18} />} label="Light" />
+              <ThemeButton active={theme === 'dark'} onClick={() => setTheme('dark')} icon={<Moon size={18} />} label="Dark" />
+              <ThemeButton active={theme === 'system'} onClick={() => setTheme('system')} icon={<Monitor size={18} />} label="System" />
+            </div>
+            <div className="card" style={{ padding: '0', marginTop: '20px' }}>
+              <div style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '1px solid var(--secondary-bg-color)' }}><span style={{ flex: 1 }}>Notifications</span><ChevronRight size={18} color="var(--hint-color)" /></div>
+            </div>
+            <button onClick={logout} className="card" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--danger-color)', marginTop: '20px' }}><LogOut size={20} /><span style={{ fontWeight: 'bold' }}>Switch Account / Role</span></button>
           </motion.div>
         );
     }
@@ -177,21 +284,28 @@ export const SellerDashboard: React.FC = () => {
             </div>
             <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
               <button onClick={() => setPaymentMethod('card')} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: `2px solid ${paymentMethod === 'card' ? 'var(--button-color)' : 'var(--secondary-bg-color)'}`, backgroundColor: paymentMethod === 'card' ? 'rgba(51, 144, 236, 0.1)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}><CreditCard size={18} color={paymentMethod === 'card' ? 'var(--button-color)' : 'var(--hint-color)'} /><span style={{ fontSize: '13px', fontWeight: 'bold' }}>Card</span></button>
-              <button onClick={() => setPaymentMethod('cash')} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: `2px solid ${paymentMethod === 'cash' ? 'var(--button-color)' : 'var(--secondary-bg-color)'}`, backgroundColor: paymentMethod === 'cash' ? 'rgba(51, 144, 236, 0.1)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}><Banknote size={18} color={paymentMethod === 'cash' ? 'var(--button-color)' : 'var(--hint-color)'} /><span style={{ fontSize: '13px', fontWeight: 'bold' }}>Cash</span></button>
+              <button onClick={() => setPaymentMethod('cash')} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: `2px solid ${paymentMethod === 'cash' ? 'var(--button-color)' : 'var(--hint-color)'}`, backgroundColor: paymentMethod === 'cash' ? 'rgba(51, 144, 236, 0.1)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}><Banknote size={18} color={paymentMethod === 'cash' ? 'var(--button-color)' : 'var(--hint-color)'} /><span style={{ fontSize: '13px', fontWeight: 'bold' }}>Cash</span></button>
             </div>
             <button onClick={handleCheckout} style={{ width: '100%', backgroundColor: 'var(--button-color)', color: 'white', padding: '16px', borderRadius: '16px', fontWeight: 'bold', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}><ShoppingCart size={20}/> Pay €{cartTotal.toFixed(2)}</button>
           </motion.div>
         )}
       </AnimatePresence>
       <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, backgroundColor: 'var(--bg-color)', borderTop: '1px solid var(--secondary-bg-color)', display: 'flex', justifyContent: 'space-around', padding: '8px 4px 24px 4px', zIndex: 1000, boxShadow: '0 -4px 12px rgba(0,0,0,0.05)' }}>
-        <TabItem active={activeTab === 'checkout'} icon={<ShoppingCart size={24} />} label="Checkout" onClick={() => setActiveTab('checkout')} />
+        <TabItem active={activeTab === 'checkout'} icon={<ShoppingCart size={24} />} label="Checkout" onClick={() => { setActiveTab('checkout'); setSelectedOrder(null); }} />
         <TabItem active={activeTab === 'history'} icon={<History size={24} />} label="Orders" onClick={() => setActiveTab('history')} />
-        <TabItem active={activeTab === 'stock'} icon={<Package size={24} />} label="My Stock" onClick={() => setActiveTab('stock')} />
-        <TabItem active={activeTab === 'shift'} icon={<Clock size={24} />} label="Shift" onClick={() => setActiveTab('shift')} />
+        <TabItem active={activeTab === 'stock'} icon={<Package size={24} />} label="My Stock" onClick={() => { setActiveTab('stock'); setSelectedOrder(null); }} />
+        <TabItem active={activeTab === 'shift'} icon={<Clock size={24} />} label="Shift" onClick={() => { setActiveTab('shift'); setSelectedOrder(null); }} />
+        <TabItem active={activeTab === 'settings'} icon={<Settings size={24} />} label="Settings" onClick={() => { setActiveTab('settings'); setSelectedOrder(null); }} />
       </div>
     </div>
   );
 };
+
+const ThemeButton: React.FC<{ active: boolean; onClick: () => void; icon: React.ReactNode; label: string }> = ({ active, onClick, icon, label }) => (
+  <button onClick={onClick} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', backgroundColor: active ? 'var(--bg-color)' : 'transparent', color: active ? 'var(--button-color)' : 'var(--hint-color)', boxShadow: active ? '0 2px 8px rgba(0,0,0,0.1)' : 'none', transition: '0.2s' }}>
+    {icon} {label}
+  </button>
+);
 
 const TabItem: React.FC<{ active: boolean; icon: React.ReactNode; label: string; onClick: () => void }> = ({ active, icon, label, onClick }) => (
   <button onClick={onClick} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'none', color: active ? 'var(--button-color)' : 'var(--hint-color)', flex: 1, padding: '4px 0' }}>

@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useInventoryStore, type Store as StoreType, type Product } from '../../store/useInventoryStore';
 import { useStaffStore, type StaffMember } from '../../store/useStaffStore';
+import { useSettingsStore, type ThemeMode } from '../../store/useSettingsStore';
 import { 
   LogOut, 
   BarChart3, 
@@ -21,7 +22,10 @@ import {
   Check,
   Save,
   Clock,
-  UserPlus
+  UserPlus,
+  Sun,
+  Moon,
+  Monitor
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
@@ -76,6 +80,7 @@ export const AdminDashboard: React.FC = () => {
   const { logout } = useAuthStore();
   const { stores, products, updateStock, addProduct, removeProduct, updateProduct } = useInventoryStore();
   const { staff, addStaff, removeStaff, updateStaff, getSellerHours, shifts } = useStaffStore();
+  const { theme, setTheme } = useSettingsStore();
   
   const [activeTab, setActiveTab] = useState<AdminTab>('stats');
   const [detailStore, setDetailStore] = useState<StoreType | null>(null);
@@ -99,10 +104,6 @@ export const AdminDashboard: React.FC = () => {
   const topProductsData = useMemo(() => getTopProducts(timeRange), [timeRange]);
   const totalRevenue = useMemo(() => salesData.reduce((acc, d) => acc + d.revenue, 0), [salesData]);
 
-  // Per-store calculations
-  const storeSalesData = useMemo(() => detailStore ? getSalesData(storeTimeRange, detailStore.id) : [], [detailStore, storeTimeRange]);
-  const storeTopProducts = useMemo(() => detailStore ? getTopProducts(storeTimeRange, detailStore.id) : [], [detailStore, storeTimeRange]);
-  
   const lowStockCount = useMemo(() => {
     return products.filter(p => Object.values(p.stock).some(s => s < 10)).length;
   }, [products]);
@@ -129,13 +130,7 @@ export const AdminDashboard: React.FC = () => {
     if (editingStaff) {
       updateStaff(editingStaff.id, { name: staffFormData.name, storeId: staffFormData.storeId });
     } else {
-      addStaff({
-        id: 's' + Date.now(),
-        name: staffFormData.name,
-        storeId: staffFormData.storeId,
-        status: 'offline',
-        joinedDate: new Date().toISOString().split('T')[0]
-      });
+      addStaff({ id: 's' + Date.now(), name: staffFormData.name, storeId: staffFormData.storeId, status: 'offline', joinedDate: new Date().toISOString().split('T')[0] });
     }
     setIsStaffEditorOpen(false);
   };
@@ -209,10 +204,6 @@ export const AdminDashboard: React.FC = () => {
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' }}>
-                      <div className="card"><div style={{ color: 'var(--hint-color)', fontSize: '11px' }}>Weekly Revenue</div><div style={{ fontSize: '18px', fontWeight: 'bold' }}>€{storeSalesData.reduce((acc, d) => acc + d.revenue, 0).toLocaleString()}</div></div>
-                      <div className="card"><div style={{ color: 'var(--hint-color)', fontSize: '11px' }}>Orders Today</div><div style={{ fontSize: '18px', fontWeight: 'bold' }}>14</div></div>
-                    </div>
                   </motion.div>
                 ) : (
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -239,82 +230,16 @@ export const AdminDashboard: React.FC = () => {
           <AnimatePresence mode="wait">
             {!detailStaff ? (
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} key="staff-list">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                  <h3>Staff Management</h3>
-                  <button 
-                    onClick={() => { setEditingStaff(null); setStaffFormData({ name: '', storeId: stores[0]?.id || '' }); setIsStaffEditorOpen(true); }}
-                    style={{ backgroundColor: 'var(--button-color)', color: 'white', padding: '8px 16px', borderRadius: '12px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}
-                  >
-                    <UserPlus size={18} /> Add
-                  </button>
-                </div>
-                <div style={{ display: 'grid', gap: '12px' }}>
-                  {staff.map(member => {
-                    const store = stores.find(s => s.id === member.storeId);
-                    return (
-                      <div key={member.id} className="card" onClick={() => setDetailStaff(member)} style={{ display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer' }}>
-                        <div style={{ position: 'relative' }}>
-                          <div style={{ backgroundColor: 'var(--secondary-bg-color)', padding: '12px', borderRadius: '50%' }}><Users size={24} color="var(--button-color)" /></div>
-                          <div style={{ position: 'absolute', bottom: 0, right: 0, width: '12px', height: '12px', borderRadius: '50%', backgroundColor: member.status === 'online' ? 'var(--success-color)' : 'var(--hint-color)', border: '2px solid var(--bg-color)' }} />
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 'bold' }}>{member.name}</div>
-                          <div style={{ fontSize: '12px', color: 'var(--hint-color)' }}>{store?.name}</div>
-                        </div>
-                        <ChevronRight size={20} color="var(--hint-color)" />
-                      </div>
-                    );
-                  })}
-                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}><h3>Staff</h3><button onClick={() => { setEditingStaff(null); setStaffFormData({ name: '', storeId: stores[0]?.id || '' }); setIsStaffEditorOpen(true); }} style={{ backgroundColor: 'var(--button-color)', color: 'white', padding: '8px 16px', borderRadius: '12px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}><UserPlus size={18} /> Add</button></div>
+                <div style={{ display: 'grid', gap: '12px' }}>{staff.map(member => (<div key={member.id} className="card" onClick={() => setDetailStaff(member)} style={{ display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer' }}><div style={{ position: 'relative' }}><div style={{ backgroundColor: 'var(--secondary-bg-color)', padding: '12px', borderRadius: '50%' }}><Users size={24} color="var(--button-color)" /></div><div style={{ position: 'absolute', bottom: 0, right: 0, width: '12px', height: '12px', borderRadius: '50%', backgroundColor: member.status === 'online' ? 'var(--success-color)' : 'var(--hint-color)', border: '2px solid var(--bg-color)' }} /></div><div style={{ flex: 1 }}><div style={{ fontWeight: 'bold' }}>{member.name}</div><div style={{ fontSize: '12px', color: 'var(--hint-color)' }}>{stores.find(s => s.id === member.storeId)?.name}</div></div><ChevronRight size={20} color="var(--hint-color)" /></div>))}</div>
                 <StaffEditor isOpen={isStaffEditorOpen} onClose={() => setIsStaffEditorOpen(false)} onSave={handleSaveStaff} formData={staffFormData} setFormData={setStaffFormData} stores={stores} isEdit={!!editingStaff} />
               </motion.div>
             ) : (
               <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} key="staff-detail">
-                <button onClick={() => setDetailStaff(null)} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--button-color)', background: 'none', marginBottom: '20px', padding: 0 }}><ArrowLeft size={18} /> Back to Staff</button>
-                
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
-                  <div style={{ backgroundColor: 'var(--secondary-bg-color)', padding: '20px', borderRadius: '50%' }}><Users size={32} color="var(--button-color)" /></div>
-                  <div>
-                    <h2 style={{ marginBottom: '4px' }}>{detailStaff.name}</h2>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '10px', backgroundColor: detailStaff.status === 'online' ? '#e6f7ed' : '#f0f0f0', color: detailStaff.status === 'online' ? 'var(--success-color)' : 'var(--hint-color)', fontWeight: 'bold' }}>{detailStaff.status.toUpperCase()}</span>
-                      <span style={{ fontSize: '12px', color: 'var(--hint-color)' }}>Joined {detailStaff.joinedDate}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px' }}>
-                  <div className="card">
-                    <div style={{ color: 'var(--hint-color)', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}><Clock size={12}/> Hours this week</div>
-                    <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{getSellerHours(detailStaff.id, 'week')}h</div>
-                  </div>
-                  <div className="card">
-                    <div style={{ color: 'var(--hint-color)', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}><TrendingUp size={12}/> Avg. Shift</div>
-                    <div style={{ fontSize: '20px', fontWeight: 'bold' }}>8.5h</div>
-                  </div>
-                </div>
-
+                <button onClick={() => setDetailStaff(null)} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--button-color)', background: 'none', marginBottom: '20px', padding: 0 }}><ArrowLeft size={18} /> Back</button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}><div style={{ backgroundColor: 'var(--secondary-bg-color)', padding: '20px', borderRadius: '50%' }}><Users size={32} color="var(--button-color)" /></div><div><h2 style={{ marginBottom: '4px' }}>{detailStaff.name}</h2><span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '10px', backgroundColor: detailStaff.status === 'online' ? '#e6f7ed' : '#f0f0f0', color: detailStaff.status === 'online' ? 'var(--success-color)' : 'var(--hint-color)', fontWeight: 'bold' }}>{detailStaff.status.toUpperCase()}</span></div></div>
                 <h3>Shift History</h3>
-                <div style={{ display: 'grid', gap: '10px', marginTop: '12px' }}>
-                  {shifts.filter(s => s.sellerId === detailStaff.id).map(shift => (
-                    <div key={shift.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px' }}>
-                      <div>
-                        <div style={{ fontWeight: '600', fontSize: '14px' }}>{new Date(shift.start).toLocaleDateString()}</div>
-                        <div style={{ fontSize: '12px', color: 'var(--hint-color)' }}>{new Date(shift.start).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - {shift.end ? new Date(shift.end).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Active'}</div>
-                      </div>
-                      <div style={{ fontWeight: 'bold', color: 'var(--button-color)' }}>
-                        {shift.end ? `${((new Date(shift.end).getTime() - new Date(shift.start).getTime()) / (1000 * 60 * 60)).toFixed(1)}h` : '...'}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <button 
-                  onClick={() => { if(confirm('Remove this staff member?')) { removeStaff(detailStaff.id); setDetailStaff(null); } }}
-                  style={{ width: '100%', marginTop: '32px', color: 'var(--danger-color)', background: 'none', fontSize: '14px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
-                >
-                  <Trash2 size={18}/> Terminate Employment
-                </button>
+                {shifts.filter(s => s.sellerId === detailStaff.id).map(shift => (<div key={shift.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px' }}><div><div style={{ fontWeight: '600', fontSize: '14px' }}>{new Date(shift.start).toLocaleDateString()}</div><div style={{ fontSize: '12px', color: 'var(--hint-color)' }}>{new Date(shift.start).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - {shift.end ? new Date(shift.end).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Active'}</div></div><div style={{ fontWeight: 'bold', color: 'var(--button-color)' }}>{shift.end ? `${((new Date(shift.end).getTime() - new Date(shift.start).getTime()) / (1000 * 60 * 60)).toFixed(1)}h` : '...'}</div></div>))}
               </motion.div>
             )}
           </AnimatePresence>
@@ -324,8 +249,20 @@ export const AdminDashboard: React.FC = () => {
         return (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} key="settings">
             <h3>Settings</h3>
-            <div className="card" style={{ padding: '0' }}><div style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '1px solid var(--bg-color)' }}><span style={{ flex: 1 }}>Notifications</span><ChevronRight size={18} color="var(--hint-color)" /></div><div style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '16px' }}><span style={{ flex: 1 }}>Appearance</span><ChevronRight size={18} color="var(--hint-color)" /></div></div>
-            <button onClick={logout} className="card" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '16px', color: 'var(--danger-color)', marginTop: '12px' }}><LogOut size={20} /><span style={{ fontWeight: '600' }}>Log Out</span></button>
+            
+            <h4 style={{ color: 'var(--hint-color)', fontSize: '12px', textTransform: 'uppercase', marginBottom: '12px', marginLeft: '4px' }}>Appearance</h4>
+            <div className="card" style={{ padding: '4px', display: 'flex', gap: '4px', backgroundColor: 'var(--secondary-bg-color)' }}>
+              <ThemeButton active={theme === 'light'} onClick={() => setTheme('light')} icon={<Sun size={18} />} label="Light" />
+              <ThemeButton active={theme === 'dark'} onClick={() => setTheme('dark')} icon={<Moon size={18} />} label="Dark" />
+              <ThemeButton active={theme === 'system'} onClick={() => setTheme('system')} icon={<Monitor size={18} />} label="System" />
+            </div>
+
+            <div className="card" style={{ padding: '0', marginTop: '20px' }}>
+              <div style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '1px solid var(--bg-color)' }}><span style={{ flex: 1 }}>Notifications</span><ChevronRight size={18} color="var(--hint-color)" /></div>
+              <div style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '16px' }}><span style={{ flex: 1 }}>Security</span><ChevronRight size={18} color="var(--hint-color)" /></div>
+            </div>
+            
+            <button onClick={logout} className="card" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '16px', color: 'var(--danger-color)', marginTop: '20px' }}><LogOut size={20} /><span style={{ fontWeight: '600' }}>Log Out</span></button>
           </motion.div>
         );
     }
@@ -339,14 +276,20 @@ export const AdminDashboard: React.FC = () => {
         <TabItem active={activeTab === 'stats'} icon={<BarChart3 size={24} />} label="Stats" onClick={() => { setActiveTab('stats'); setDetailStore(null); setDetailStaff(null); }} />
         <TabItem active={activeTab === 'inventory'} icon={<Package size={24} />} label="Stock" onClick={() => { setActiveTab('inventory'); setDetailStore(null); setDetailStaff(null); }} />
         <TabItem active={activeTab === 'stores'} icon={<Store size={24} />} label="Stores" onClick={() => { setActiveTab('stores'); setDetailStaff(null); }} />
-        <TabItem active={activeTab === 'users'} icon={<Users size={24} />} label="Staff" onClick={() => { setActiveTab('users'); setDetailStore(null); }} />
+        <TabItem active={activeTab === 'users'} icon={<Users size={24} />} label="Staff" onClick={() => { setActiveTab('users'); setDetailStore(null); setDetailStaff(null); }} />
         <TabItem active={activeTab === 'settings'} icon={<Settings size={24} />} label="Options" onClick={() => { setActiveTab('settings'); setDetailStore(null); setDetailStaff(null); }} />
       </div>
     </div>
   );
 };
 
-// Reusable Components
+// Sub-components
+const ThemeButton: React.FC<{ active: boolean; onClick: () => void; icon: React.ReactNode; label: string }> = ({ active, onClick, icon, label }) => (
+  <button onClick={onClick} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', backgroundColor: active ? 'var(--bg-color)' : 'transparent', color: active ? 'var(--button-color)' : 'var(--hint-color)', boxShadow: active ? '0 2px 8px rgba(0,0,0,0.1)' : 'none', transition: '0.2s' }}>
+    {icon} {label}
+  </button>
+);
+
 const TimeRangeSelector: React.FC<{ value: TimeRange; onChange: (v: TimeRange) => void }> = ({ value, onChange }) => (
   <div style={{ display: 'flex', backgroundColor: 'var(--secondary-bg-color)', padding: '4px', borderRadius: '12px', marginBottom: '20px' }}>
     {(['day', 'week', 'month', 'all'] as TimeRange[]).map((range) => (
