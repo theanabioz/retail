@@ -61,8 +61,6 @@ Copy `.env.example` to `.env` and fill in:
 - `SUPABASE_ANON_KEY`
 - `SUPABASE_DB_URL`
 - `TELEGRAM_BOT_TOKEN`
-- `VITE_API_BASE_URL`
-
 Important:
 
 - the anon key is fine for the frontend
@@ -96,13 +94,11 @@ Local endpoints:
 
 ## Frontend Production API
 
-The frontend reads the backend base URL from `VITE_API_BASE_URL`.
+In production, the frontend talks to the API through the same origin:
 
-For single-domain production behind `Nginx`, keep it as:
+- `https://nordanalytica.com/api`
 
-- `/api`
-
-This lets the browser call the same origin for both the UI and API.
+This keeps the app on a single domain and avoids cross-origin complexity.
 
 ## Realtime Strategy
 
@@ -122,12 +118,11 @@ Before public deployment:
 1. Set `ENVIRONMENT=production`
 2. Use the real `TELEGRAM_BOT_TOKEN`
 3. Use the Supabase `Session Pooler` connection string
-4. Set `VITE_API_BASE_URL=/api`
-5. Point `nordanalytica.com` to the server
-6. Configure host `Nginx` to proxy:
+4. Point `nordanalytica.com` to the server
+5. Configure host `Nginx` to proxy:
    - `/` to `127.0.0.1:8080`
    - `/api` to `127.0.0.1:8000/api/v1`
-7. Launch the frontend only inside Telegram Mini App context
+6. Launch the frontend only inside Telegram Mini App context
 
 ## Core Database Entities
 
