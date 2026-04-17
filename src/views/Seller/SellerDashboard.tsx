@@ -52,18 +52,19 @@ interface Order {
 
 const mockOrders: Order[] = [
   { 
-    id: '1201', time: '12:45', total: 24.50, paymentMethod: 'card', 
+    id: '1201', time: '12:45', total: 54.80, paymentMethod: 'card', 
     items: [
-      { name: 'Americano Coffee', quantity: 2, price: 3.50 },
-      { name: 'Butter Croissant', quantity: 1, price: 2.20 },
-      { name: 'Tuna Sandwich', quantity: 1, price: 5.90 }
+      { name: 'Herbal Oil 10ml', quantity: 1, price: 24.90 },
+      { name: 'Pre-Rolled Herbal Stick', quantity: 2, price: 6.50 },
+      { name: 'Botanical Balm 30g', quantity: 1, price: 16.90 }
     ]
   },
   { 
-    id: '1202', time: '13:20', total: 12.80, paymentMethod: 'cash', 
+    id: '1202', time: '13:20', total: 56.70, paymentMethod: 'cash', 
     items: [
-      { name: 'Fresh Orange Juice', quantity: 1, price: 4.00 },
-      { name: 'Butter Croissant', quantity: 4, price: 2.20 }
+      { name: 'Herbal Blend 1g', quantity: 2, price: 8.90 },
+      { name: 'Relax Gummies 20pcs', quantity: 1, price: 21.00 },
+      { name: 'Terpene Drops', quantity: 1, price: 17.90 }
     ]
   }
 ];
